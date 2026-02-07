@@ -121,7 +121,7 @@ def main():
 
     st.markdown("---")
 
-    # --- ABA 1: SIMULAÇÃO ATUAL ---
+    # --- LÓGICA DE DADOS (DEMAIS ABAS) ---
     desc_salvar = round(((1 - (v_lance / v_avaliacao)) *
                         100), 2) if v_avaliacao > 0 else 0
     nova_linha = pd.DataFrame([{
@@ -163,113 +163,30 @@ def main():
         "ROI %": roi
     }])
 
-    # --- ABA 2: ANÁLISE DE RISCO (LANCE) ---
-    cenarios_lance = []
-    if v_lance > 0:
+    # --- EXPORTAÇÃO E DOWNLOAD ---
+    def gerar_excel_final():
+        # Lógica de geração de cenários interna para o download
+        cenarios_lance = []
         for i in range(11):
             fator = 1 + (i * 0.05)
             l_cen = v_lance * fator
-            e_cen = l_cen * (1 - desc_vista /
-                             100) if tipo_compra == "À Vista" else v_entrada
+            e_cen = l_cen * (1 - desc_vista / 100) if tipo_compra == "À Vista" else v_entrada
             fin_cen = l_cen - e_cen
-            b1_cen = e_cen + (l_cen * 0.05) + (l_cen * 0.03) + \
-                cartorio + dividas + desocupa
-            j_cen = (v_prestacao * prazo_venda) if v_prestacao > 0 else (fin_cen *
-                                                                         juros_mensal * prazo_venda)
+            b1_cen = e_cen + (l_cen * 0.05) + (l_cen * 0.03) + cartorio + dividas + desocupa
+            j_cen = (v_prestacao * prazo_venda) if v_prestacao > 0 else (fin_cen * juros_mensal * prazo_venda)
             total_inv = b1_cen + reforma + total_manutencao_periodo + j_cen
             luc_b = v_venda_liq - fin_cen - total_inv
             v_i = max(0.0, luc_b * (imp_p/100))
             luc_l = luc_b - v_i
             roi_c = (luc_l / total_inv * 100) if total_inv > 0 else 0
-            cenarios_lance.append({"Cenário": f"Lance +{i*5}%", "Valor do Lance": l_cen, "Investimento de Bolso": total_inv,
-                                  "Lucro Líquido": luc_l, "ROI %": round(roi_c, 2), "Status": "POSITIVO" if luc_l > 0 else "NEGATIVO"})
-    df_risco = pd.DataFrame(cenarios_lance)
+            cenarios_lance.append({"Cenário": f"Lance +{i*5}%", "Valor do Lance": l_cen, "Investimento de Bolso": total_inv, "Lucro Líquido": luc_l, "ROI %": round(roi_c, 2)})
+        
+        df_risco = pd.DataFrame(cenarios_lance)
 
-    # --- ABA 3: DETALHES FINANCEIROS ---
-    df_detalhes = pd.DataFrame()
-    if tipo_compra == "Financiado":
-        detalhes_data = [
-            {"Categoria": "FINANCIAMENTO",
-                "Item": "Valor Financiado", "Valor": v_financiado},
-            {"Categoria": "FINANCIAMENTO",
-                "Item": "Taxa Juros Anual (%)", "Valor": juros_anual},
-            {"Categoria": "FINANCIAMENTO", "Item": "Custo Juros no Período",
-                "Valor": custo_juros_periodo},
-            {"Categoria": "CUSTOS MENSAIS", "Item": "Condomínio Total",
-                "Valor": condo_m * prazo_venda},
-            {"Categoria": "CUSTOS MENSAIS", "Item": "IPTU Total",
-                "Valor": iptu_m * prazo_venda},
-            {"Categoria": "CUSTOS MENSAIS", "Item": "Água Total",
-                "Valor": agua_m * prazo_venda},
-            {"Categoria": "CUSTOS MENSAIS", "Item": "Luz Total",
-                "Valor": luz_m * prazo_venda},
-            {"Categoria": "CUSTOS MENSAIS", "Item": "Gás Total",
-                "Valor": gas_m * prazo_venda},
-            {"Categoria": "RESUMO", "Item": "Manutenção Total",
-                "Valor": total_manutencao_periodo},
-            {"Categoria": "RESUMO",
-                "Item": "Prazo Venda (Meses)", "Valor": prazo_venda}
-        ]
-        df_detalhes = pd.DataFrame(detalhes_data)
-
-    # --- ABA 4: ANÁLISE DE MERCADO (VARIAÇÃO VENDA) ---
-    variacoes = [0.10, 0.05, 0, -0.05, -0.10, -0.15, -0.20]
-    cenarios_venda = []
-    for var in variacoes:
-        v_venda_var = v_venda * (1 + var)
-        comis_var = v_venda_var * comis_cor_perc
-        v_venda_liq_var = v_venda_var - comis_var
-        luc_bruto_var = v_venda_liq_var - v_financiado - invest_bolso
-        v_imp_var = max(0.0, luc_bruto_var * (imp_p/100))
-        luc_liq_var = luc_bruto_var - v_imp_var
-        roi_var = (luc_liq_var / invest_bolso * 100) if invest_bolso > 0 else 0
-        cenarios_venda.append({
-            "Variação Mercado": f"{int(var*100)}%",
-            "Novo Valor Venda": v_venda_var,
-            "Lucro Líquido": luc_liq_var,
-            "ROI %": round(roi_var, 2),
-            "Status": "VIÁVEL" if roi_var >= 15 else ("RISCO" if roi_var > 0 else "PREJUÍZO")
-        })
-    df_mercado = pd.DataFrame(cenarios_venda)
-
-    # --- EXPORTAÇÃO ---
-    def gerar_excel_final():
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            nova_linha.to_excel(writer, index=False,
-                                sheet_name='Simulacao_Atual')
-            df_risco.to_excel(writer, index=False,
-                              sheet_name='Analise_de_Risco')
-            df_mercado.to_excel(writer, index=False,
-                                sheet_name='Analise_de_Mercado')
-            if not df_detalhes.empty:
-                df_detalhes.to_excel(writer, index=False,
-                                     sheet_name='Detalhes_Financeiros')
-
-            workbook = writer.book
-            green = workbook.add_format(
-                {'bg_color': '#C6EFCE', 'font_color': '#006100'})
-            red = workbook.add_format(
-                {'bg_color': '#FFC7CE', 'font_color': '#9C0006'})
-            yellow = workbook.add_format(
-                {'bg_color': '#FFEB9C', 'font_color': '#9C6500'})
-
-            # Formatação Risco
-            ws_risco = writer.sheets['Analise_de_Risco']
-            ws_risco.conditional_format(
-                'E2:E12', {'type': 'cell', 'criteria': '<', 'value': 0, 'format': red})
-            ws_risco.conditional_format(
-                'E2:E12', {'type': 'cell', 'criteria': '>=', 'value': 0, 'format': green})
-
-            # Formatação Mercado
-            ws_mercado = writer.sheets['Analise_de_Mercado']
-            ws_mercado.conditional_format(
-                'D2:D8', {'type': 'cell', 'criteria': '<', 'value': 0, 'format': red})
-            ws_mercado.conditional_format('D2:D8', {
-                                          'type': 'cell', 'criteria': 'between', 'left': 0, 'right': 15, 'format': yellow})
-            ws_mercado.conditional_format(
-                'D2:D8', {'type': 'cell', 'criteria': '>=', 'value': 15, 'format': green})
-
+            nova_linha.to_excel(writer, index=False, sheet_name='Simulacao_Atual')
+            df_risco.to_excel(writer, index=False, sheet_name='Analise_de_Risco')
         return output.getvalue()
 
     st.download_button(
@@ -278,8 +195,25 @@ def main():
         file_name=f"relatorio_estrategico_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         on_click=st.toast,
-        args=("Relatório completo com Análise de Mercado gerado!",)
+        args=("Relatório completo gerado!",)
     )
+
+    # --- RODAPÉ (FOOTER) ---
+    st.markdown("---")
+    footer_html = """
+    <div style='text-align: center; color: gray;'>
+        <p style='margin-bottom: 5px;'>Desenvolvido por <b>Rodrigo AIOSA</b></p>
+        <div style='display: flex; justify-content: center; gap: 20px; font-size: 24px;'>
+            <a href='https://wa.me/5511977019335' target='_blank' style='text-decoration: none;'>
+                <img src='https://cdn-icons-png.flaticon.com/512/733/733585.png' width='25' height='25' title='WhatsApp'>
+            </a>
+            <a href='https://www.linkedin.com/in/rodrigoaiosa/' target='_blank' style='text-decoration: none;'>
+                <img src='https://cdn-icons-png.flaticon.com/512/174/174857.png' width='25' height='25' title='LinkedIn'>
+            </a>
+        </div>
+    </div>
+    """
+    st.markdown(footer_html, unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
