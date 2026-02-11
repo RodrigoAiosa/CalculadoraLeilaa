@@ -1,2 +1,5 @@
+streamlit
+pandas
+selenium
 webdriver-manager
-selenium>=4.20.0
+xlsxwriter
