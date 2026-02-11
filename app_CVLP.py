@@ -124,7 +124,7 @@ def main():
                     st.error(qtd)
 
     # --- BLOCO 1: ARREMATAÇÃO ---
-    with st.expander("💵 Bloco 1: Arrematação", expanded=True):
+    with st.expander("💵 Arrematação", expanded=True):
         col_inp, col_mem = st.columns([3, 2])
         with col_inp:
             v_avaliacao = st.number_input("Valor de Avaliação (R$)", value=float(d["avaliacao"]))
@@ -147,7 +147,7 @@ def main():
         with col_mem: st.metric("Total Arrematação", format_brl(total_b1))
 
     # --- BLOCO 2: CUSTOS ---
-    with st.expander("🔗 Bloco 2: Custos Intermediários", expanded=True):
+    with st.expander("🔗 Custos Intermediários", expanded=True):
         col_inp2, col_mem2 = st.columns([3, 2])
         with col_inp2:
             reforma = st.number_input("Reforma (R$)", value=float(d["reforma"]))
@@ -159,7 +159,7 @@ def main():
         with col_mem2: st.metric("Total Intermediários", format_brl(total_b2))
 
     # --- BLOCO 3: VENDA ---
-    with st.expander("🏷️ Bloco 3: Venda e Lucro", expanded=True):
+    with st.expander("🏷️ Venda e Lucro", expanded=True):
         col_v1, col_v2 = st.columns([3, 2])
         with col_v1:
             v_venda = st.number_input("Preço de Venda (R$)", value=float(d["venda"]))
@@ -202,3 +202,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
