@@ -38,6 +38,20 @@ def tratar_texto_caixa(df):
                 df[col] = df[col].astype(str).str.replace(erro, correto)
     return df
 
+# --- FUNÇÃO PARA SALVAR E ACUMULAR DADOS ---
+def salvar_dados(nova_simulacao):
+    arquivo = "historico_simulacoes.csv"
+    df_novo = pd.DataFrame([nova_simulacao])
+    
+    if os.path.exists(arquivo):
+        df_antigo = pd.read_csv(arquivo)
+        df_final = pd.concat([df_antigo, df_novo], ignore_index=True)
+    else:
+        df_final = df_novo
+        
+    df_final.to_csv(arquivo, index=False)
+    return df_final
+
 # --- MOTOR DE SCRAPING ---
 def robo_caixa():
     download_dir = os.path.join(os.getcwd(), "temp_caixa")
@@ -98,18 +112,16 @@ def robo_caixa():
 # --- INTERFACE PRINCIPAL ---
 def main():
     # --- LOGOTIPO NA SIDEBAR ---
-    # Ajustado para 'logo.jpg' conforme visto no seu repositório GitHub
-    caminho_logo = "logo.jpg" 
+    # Usando r"" para evitar erro de escape no Windows
+    caminho_logo = "logo.jpg"
     
     if os.path.exists(caminho_logo):
         st.sidebar.image(caminho_logo, use_container_width=True)
     else:
-        # Tenta procurar qualquer imagem de logo caso o formato mude
+        st.sidebar.warning("Logo não encontrado no caminho local. Tentando pasta raiz...")
         arquivos_imagem = glob.glob("logo.*")
         if arquivos_imagem:
             st.sidebar.image(arquivos_imagem[0], use_container_width=True)
-        else:
-            st.sidebar.error("Arquivo 'logo.jpg' não encontrado no repositório.")
 
     st.title("⚖️ Calculadora de Viabilidade Leilão - Profissional")
 
@@ -196,6 +208,29 @@ def main():
             else:
                 st.error(f"### Prejuízo: {format_brl(lucro_liq)}\n### ROI: {roi:.2f}%")
 
+    # --- BOTÃO PARA SALVAR SIMULAÇÃO ---
+    if st.button("💾 Salvar Simulação na Tabela"):
+        dados = {
+            "Data": datetime.now().strftime("%d/%m/%Y %H:%M"),
+            "Tipo": tipo_imovel,
+            "Avaliação": v_avaliacao,
+            "Lance": v_lance,
+            "Investimento Inicial": invest_total,
+            "Lucro Líquido": lucro_liq,
+            "ROI %": round(roi, 2)
+        }
+        salvar_dados(dados)
+        st.toast("Simulação salva com sucesso!", icon="✅")
+
+    # --- TABELA DE HISTÓRICO ---
+    st.markdown("---")
+    st.subheader("📜 Histórico de Simulações")
+    if os.path.exists("historico_simulacoes.csv"):
+        df_hist = pd.read_csv("historico_simulacoes.csv")
+        st.dataframe(df_hist, use_container_width=True)
+    else:
+        st.info("Nenhuma simulação salva ainda.")
+
     # --- RELATÓRIO EXCEL ---
     def exportar():
         output = io.BytesIO()
@@ -213,7 +248,7 @@ def main():
             return None
 
     st.sidebar.markdown("---")
-    st.sidebar.download_button("📥 BAIXAR RELATÓRIO COMPLETO", exportar(), f"simulacao_{tipo_imovel}.xlsx")
+    st.sidebar.download_button("📥 BAIXAR EXCEL ÚNICO", exportar(), f"simulacao_{tipo_imovel}.xlsx")
 
 if __name__ == "__main__":
     main()
