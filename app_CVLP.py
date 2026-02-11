@@ -34,10 +34,11 @@ def tratar_texto_caixa(df):
     cols_obj = df.select_dtypes(include=['object']).columns
     for col in cols_obj:
         for erro, correto in mapa.items():
-            df[col] = df[col].astype(str).str.replace(erro, correto)
+            if col in df.columns:
+                df[col] = df[col].astype(str).str.replace(erro, correto)
     return df
 
-# --- MOTOR DE SCRAPING (O QUE FUNCIONA) ---
+# --- MOTOR DE SCRAPING ---
 def robo_caixa():
     download_dir = os.path.join(os.getcwd(), "temp_caixa")
     if not os.path.exists(download_dir): os.makedirs(download_dir)
@@ -96,6 +97,14 @@ def robo_caixa():
 
 # --- INTERFACE PRINCIPAL ---
 def main():
+    # --- LOGOTIPO NA SIDEBAR ---
+    # Substitua 'logo.png' pelo nome exato do seu arquivo de imagem
+    caminho_logo = "logo.png" 
+    if os.path.exists(caminho_logo):
+        st.sidebar.image(caminho_logo, use_container_width=True)
+    else:
+        st.sidebar.warning("Arquivo de logo não encontrado.")
+
     st.title("⚖️ Calculadora de Viabilidade Leilão - Profissional")
 
     # --- SIDEBAR: PERFIS ---
@@ -202,4 +211,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
