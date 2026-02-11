@@ -13,7 +13,9 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="Calculadora de Viabilidade Leilão", layout="wide", page_icon="⚖️")
+# Nota: O ícone da aba (page_icon) foi mantido como emoji ou pode ser um caminho se o Streamlit detectar, 
+# mas o foco da mudança visual foi o título principal.
+st.set_page_config(page_title="Calculadora de Viabilidade Leilão", layout="wide", page_icon="logo.jpg")
 
 def format_brl(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -111,10 +113,9 @@ def robo_caixa():
 
 # --- INTERFACE PRINCIPAL ---
 def main():
-    # --- LOGOTIPO NA SIDEBAR ---
-    # Usando r"" para evitar erro de escape no Windows
     caminho_logo = "logo.jpg"
     
+    # --- LOGOTIPO NA SIDEBAR ---
     if os.path.exists(caminho_logo):
         st.sidebar.image(caminho_logo, use_container_width=True)
     else:
@@ -123,7 +124,13 @@ def main():
         if arquivos_imagem:
             st.sidebar.image(arquivos_imagem[0], use_container_width=True)
 
-    st.title("⚖️ Calculadora de Viabilidade Leilão - Profissional")
+    # --- TÍTULO PRINCIPAL COM LOGO EM VEZ DO ÍCONE ---
+    col_logo, col_titulo = st.columns([1, 8])
+    with col_logo:
+        if os.path.exists(caminho_logo):
+            st.image(caminho_logo, width=80)
+    with col_titulo:
+        st.title("Calculadora de Viabilidade Leilão - Profissional")
 
     # --- SIDEBAR: PERFIS ---
     st.sidebar.header("🚀 Perfil de Investimento")
