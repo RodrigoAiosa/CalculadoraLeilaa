@@ -139,16 +139,16 @@ def main():
     d = defaults[perfil]
 
     # --- EXTRAÇÃO CAIXA ---
-    with st.expander("🏢 Extrair Lista da Caixa", expanded=False):
-        if st.button("🚀 Rodar Robô de Coleta"):
-            with st.status("Extraindo dados...", expanded=True) as status:
-                csv, qtd = robo_caixa()
-                if csv:
-                    status.update(label="Coleta Finalizada!", state="complete")
-                    st.download_button("💾 Baixar CSV da Caixa", csv, "lista_caixa.csv", "text/csv")
-                else:
-                    status.update(label="Falha na Coleta", state="error")
-                    st.error(qtd)
+    # with st.expander("🏢 Extrair Lista da Caixa", expanded=False):
+    #     if st.button("🚀 Rodar Robô de Coleta"):
+    #         with st.status("Extraindo dados...", expanded=True) as status:
+    #             csv, qtd = robo_caixa()
+    #             if csv:
+    #                 status.update(label="Coleta Finalizada!", state="complete")
+    #                 st.download_button("💾 Baixar CSV da Caixa", csv, "lista_caixa.csv", "text/csv")
+    #             else:
+    #                 status.update(label="Falha na Coleta", state="error")
+    #                 st.error(qtd)
 
     # --- BLOCO 1: ARREMATAÇÃO ---
     with st.expander("💵 Arrematação", expanded=True):
@@ -252,3 +252,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
