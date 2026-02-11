@@ -98,12 +98,18 @@ def robo_caixa():
 # --- INTERFACE PRINCIPAL ---
 def main():
     # --- LOGOTIPO NA SIDEBAR ---
-    # Substitua 'logo.png' pelo nome exato do seu arquivo de imagem
-    caminho_logo = "logo.png" 
+    # Ajustado para 'logo.jpg' conforme visto no seu repositório GitHub
+    caminho_logo = "logo.jpg" 
+    
     if os.path.exists(caminho_logo):
         st.sidebar.image(caminho_logo, use_container_width=True)
     else:
-        st.sidebar.warning("Arquivo de logo não encontrado.")
+        # Tenta procurar qualquer imagem de logo caso o formato mude
+        arquivos_imagem = glob.glob("logo.*")
+        if arquivos_imagem:
+            st.sidebar.image(arquivos_imagem[0], use_container_width=True)
+        else:
+            st.sidebar.error("Arquivo 'logo.jpg' não encontrado no repositório.")
 
     st.title("⚖️ Calculadora de Viabilidade Leilão - Profissional")
 
