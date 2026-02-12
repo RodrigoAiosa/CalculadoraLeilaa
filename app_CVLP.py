@@ -209,15 +209,29 @@ def main():
         salvar_dados(dados)
         st.toast("Simulação salva com sucesso!", icon="✅")
 
-    # --- TABELA DE HISTÓRICO ---
+    # --- TABELA DE HISTÓRICO COM EXCLUSÃO INDIVIDUAL ---
     st.markdown("---")
     st.subheader("📜 Histórico de Simulações")
     arquivo_hist = "historico_simulacoes.csv"
+    
     if os.path.exists(arquivo_hist):
         df_hist = pd.read_csv(arquivo_hist)
-        st.dataframe(df_hist, use_container_width=True)
         
-        # Botão para limpar histórico
+        # O data_editor permite o ícone de lixeira (que remove a linha)
+        # Ao clicar no ícone de lixeira ao lado do índice, a linha é marcada para deleção
+        edited_df = st.data_editor(
+            df_hist, 
+            use_container_width=True, 
+            num_rows="dynamic",
+            key="historico_editor"
+        )
+        
+        # Se o número de linhas mudar, salvamos o novo arquivo
+        if len(edited_df) != len(df_hist):
+            edited_df.to_csv(arquivo_hist, index=False)
+            st.rerun()
+
+        # Botão para limpar histórico total
         if st.button("🗑️ Limpar Histórico de Simulações"):
             os.remove(arquivo_hist)
             st.rerun()
