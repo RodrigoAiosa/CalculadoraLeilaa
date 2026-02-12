@@ -186,7 +186,7 @@ def main():
         # BOTÃO DE DOWNLOAD EXCLUSIVO PARA EXCEL (SEM VÍRGULAS OU ERROS DE ACENTO)
         csv_data = edited_df.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
         st.download_button(
-            label="📥 Baixar Histórico para Excel (Colunas Separadas)",
+            label="📥 Baixar Histórico para Excel",
             data=csv_data,
             file_name=f"historico_leilao_{datetime.now().strftime('%d_%m_%Y')}.csv",
             mime="text/csv",
@@ -200,3 +200,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
