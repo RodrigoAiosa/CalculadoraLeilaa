@@ -1,258 +1,189 @@
-import streamlit as st
+import cv2
 import pandas as pd
-import io
 import os
-import time
-import glob
-import shutil
+import numpy as np
+from ultralytics import YOLO
+import supervision as sv
 from datetime import datetime
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import Select, WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service
+import tkinter as tk
+from tkinter import simpledialog
 
-# --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="Calculadora de Viabilidade Leilão", layout="wide", page_icon="⚖️")
+# --- VARIÁVEIS GLOBAIS ---
+pontos_temporarios = []
+todas_as_zonas_pontos = []
+nomes_das_zonas = []
+fator_x, fator_y = 1.0, 1.0
 
-def format_brl(valor):
-    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+def obter_resolucao_monitor():
+    root = tk.Tk()
+    l, a = root.winfo_screenwidth(), root.winfo_screenheight()
+    root.destroy()
+    return l, a
 
-def tratar_texto_caixa(df):
-    """Corrige os erros de codificação brutais da Caixa e remove espaços."""
-    mapa = {
-        'NÂ°': 'N°', 'imÃ³vel': 'imóvel', 'EndereÃ§o': 'Endereço', 
-        'PreÃ§o': 'Preço', 'avaliaÃ§Ã£o': 'avaliação', 'DescriÃ§Ã£o': 'Descrição',
-        'Ã§Ã£o': 'ção', 'Ã³': 'ó', 'Ã¢': 'â', 'Ã©': 'é', 'Ãº': 'ú', 'Ã': 'á'
-    }
-    df.columns = [c.strip() for c in df.columns]
-    for col in df.columns:
-        for erro, correto in mapa.items():
-            if erro in col:
-                df.rename(columns={col: col.replace(erro, correto)}, inplace=True)
-    
-    cols_obj = df.select_dtypes(include=['object']).columns
-    for col in cols_obj:
-        for erro, correto in mapa.items():
-            if col in df.columns:
-                df[col] = df[col].astype(str).str.replace(erro, correto)
-    return df
+def pedir_nome_zona():
+    root = tk.Tk()
+    root.withdraw()
+    # Largura corrigida para exibir o título completo
+    prompt = " " * 60 + "\nDigite o nome desta zona de carga:"
+    nome = simpledialog.askstring("Nova Área", prompt, 
+                                  initialvalue=f"Area_{len(todas_as_zonas_pontos)+1}")
+    root.destroy()
+    return nome if nome else f"Area_{len(todas_as_zonas_pontos)+1}"
 
-# --- FUNÇÃO PARA SALVAR E ACUMULAR DADOS ---
-def salvar_dados(nova_simulacao):
-    arquivo = "historico_simulacoes.csv"
-    df_novo = pd.DataFrame([nova_simulacao])
-    
+def clique_mouse(event, x, y, flags, param):
+    global pontos_temporarios, todas_as_zonas_pontos, nomes_das_zonas, fator_x, fator_y
+    if event == cv2.EVENT_LBUTTONDOWN:
+        x_real, y_real = int(x / fator_x), int(y / fator_y)
+        if len(pontos_temporarios) >= 3:
+            p_ini = pontos_temporarios[0]
+            if np.sqrt((x_real - p_ini[0])**2 + (y_real - p_ini[1])**2) < 20:
+                todas_as_zonas_pontos.append(np.array(pontos_temporarios))
+                nomes_das_zonas.append(pedir_nome_zona())
+                pontos_temporarios = []
+                return
+        pontos_temporarios.append([x_real, y_real])
+
+def carregar_persistente():
+    arquivo = r"C:\Users\aiosa\OneDrive\Clientes\Suzano\relatorio_doc.xlsx"
+    contagens = {nome: 0 for nome in nomes_das_zonas}
     if os.path.exists(arquivo):
-        df_antigo = pd.read_csv(arquivo)
-        df_final = pd.concat([df_antigo, df_novo], ignore_index=True)
-    else:
-        df_final = df_novo
-        
-    df_final.to_csv(arquivo, index=False)
-    return df_final
-
-# --- MOTOR DE SCRAPING ---
-def robo_caixa():
-    download_dir = os.path.join(os.getcwd(), "temp_caixa")
-    if not os.path.exists(download_dir): os.makedirs(download_dir)
-    
-    for f in glob.glob(os.path.join(download_dir, "*.csv")):
-        try: os.remove(f)
-        except: pass
-
-    chrome_path = shutil.which("chromium") or shutil.which("google-chrome")
-    driver_path = shutil.which("chromedriver")
-
-    if not chrome_path or not driver_path:
-        return None, "Erro: Binários não encontrados. Verifique o packages.txt."
-
-    options = webdriver.ChromeOptions()
-    options.binary_location = chrome_path
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-
-    prefs = {"download.default_directory": download_dir, "download.prompt_for_download": False}
-    options.add_experimental_option("prefs", prefs)
-    
-    driver = None
-    try:
-        service = Service(executable_path=driver_path)
-        driver = webdriver.Chrome(service=service, options=options)
-        driver.set_page_load_timeout(30)
-        driver.get("https://venda-imoveis.caixa.gov.br/sistema/download-lista.asp")
-        
-        wait = WebDriverWait(driver, 25)
-        dropdown = wait.until(EC.presence_of_element_located((By.ID, "cmb_estado")))
-        Select(dropdown).select_by_value("geral")
-        
-        btn = wait.until(EC.element_to_be_clickable((By.ID, "btn_next1")))
-        driver.execute_script("arguments[0].click();", btn)
-
-        timeout = 90
-        start = time.time()
-        while time.time() - start < timeout:
-            arquivos = glob.glob(os.path.join(download_dir, "*.csv"))
-            if arquivos:
-                time.sleep(3)
-                df = pd.read_csv(arquivos[0], sep=';', encoding='ISO-8859-1', skiprows=2)
-                df = tratar_texto_caixa(df)
-                csv_data = df.to_csv(index=False, sep=';', encoding='utf-8-sig')
-                driver.quit()
-                return csv_data, len(df)
-            time.sleep(3)
-    except Exception as e:
-        if driver: driver.quit()
-        return None, f"Erro: {str(e)}"
-    return None, "Tempo esgotado."
-
-# --- INTERFACE PRINCIPAL ---
-def main():
-    # --- LOGOTIPO NA SIDEBAR ---
-    # Usando r"" para evitar erro de escape no Windows
-    caminho_logo = "logo.jpg"
-    
-    if os.path.exists(caminho_logo):
-        st.sidebar.image(caminho_logo, use_container_width=True)
-    else:
-        st.sidebar.warning("Logo não encontrado no caminho local. Tentando pasta raiz...")
-        arquivos_imagem = glob.glob("logo.*")
-        if arquivos_imagem:
-            st.sidebar.image(arquivos_imagem[0], use_container_width=True)
-
-    st.title("⚖️ Calculadora de Viabilidade Leilão - **ARREMATE SEM MEDO**")
-
-    # --- SIDEBAR: PERFIS ---
-    st.sidebar.header("🚀 Perfil de Investimento")
-    tipo_imovel = st.sidebar.selectbox("Selecione o tipo de imóvel:", ["Apartamento", "Casa", "Terreno", "Gleba"])
-    perfil = st.sidebar.selectbox("Escolha um perfil:", ["Manual", "Apartamento Popular", "Médio Padrão", "Alto Padrão"])
-
-    defaults = {
-        "Manual": {"avaliacao": 0.0, "lance": 0.0, "desocupa": 0.0, "reforma": 0.0, "condo": 0.0, "iptu": 0.0, "venda": 0.0, "agua": 0.0, "luz": 0.0, "gas": 0.0},
-        "Apartamento Popular": {"avaliacao": 250000.0, "lance": 160000.0, "desocupa": 8000.0, "reforma": 20000.0, "condo": 350.0, "iptu": 60.0, "venda": 245000.0, "agua": 60.0, "luz": 120.0, "gas": 45.0},
-        "Médio Padrão": {"avaliacao": 750000.0, "lance": 450000.0, "desocupa": 5000.0, "reforma": 35000.0, "condo": 800.0, "iptu": 200.0, "venda": 700000.0, "agua": 90.0, "luz": 250.0, "gas": 85.0},
-        "Alto Padrão": {"avaliacao": 2500000.0, "lance": 1300000.0, "desocupa": 0.0, "reforma": 120000.0, "condo": 2200.0, "iptu": 900.0, "venda": 2200000.0, "agua": 180.0, "luz": 650.0, "gas": 150.0}
-    }
-    d = defaults[perfil]
-
-    # --- EXTRAÇÃO CAIXA ---
-    # with st.expander("🏢 Extrair Lista da Caixa", expanded=False):
-    #     if st.button("🚀 Rodar Robô de Coleta"):
-    #         with st.status("Extraindo dados...", expanded=True) as status:
-    #             csv, qtd = robo_caixa()
-    #             if csv:
-    #                 status.update(label="Coleta Finalizada!", state="complete")
-    #                 st.download_button("💾 Baixar CSV da Caixa", csv, "lista_caixa.csv", "text/csv")
-    #             else:
-    #                 status.update(label="Falha na Coleta", state="error")
-    #                 st.error(qtd)
-
-    # --- BLOCO 1: ARREMATAÇÃO ---
-    with st.expander("💵 Arrematação", expanded=True):
-        col_inp, col_mem = st.columns([3, 2])
-        with col_inp:
-            v_avaliacao = st.number_input("Valor de Avaliação (R$)", value=float(d["avaliacao"]))
-            tipo_compra = st.radio("Pagamento:", ["À Vista", "Financiado"], horizontal=True)
-            v_lance = st.number_input("Valor do Lance (R$)", value=float(d["lance"]))
-            
-            v_entrada, v_financiado, juros_mensal, v_prestacao = 0.0, 0.0, 0.0, 0.0
-            if tipo_compra == "Financiado":
-                v_entrada = st.number_input("Entrada (R$)", value=float(v_lance * 0.20))
-                v_financiado = v_lance - v_entrada
-                j_anual = st.number_input("Taxa Juros (% a.a.)", value=9.5)
-                juros_mensal = (1 + j_anual/100)**(1/12) - 1
-                v_prestacao = st.number_input("Prestação Mensal (R$)", value=0.0)
-            else:
-                v_entrada = v_lance
-
-            taxas_docs = st.number_input("Leiloeiro/ITBI/Registro (R$)", value=float(v_lance * 0.08))
-            desocupa = st.number_input("Desocupação (R$)", value=float(d["desocupa"]))
-            total_b1 = v_entrada + taxas_docs + desocupa
-        with col_mem: st.metric("Total Arrematação", format_brl(total_b1))
-
-    # --- BLOCO 2: CUSTOS ---
-    with st.expander("🔗 Custos Intermediários", expanded=True):
-        col_inp2, col_mem2 = st.columns([3, 2])
-        with col_inp2:
-            reforma = st.number_input("Reforma (R$)", value=float(d["reforma"]))
-            meses = st.number_input("Meses até a Venda", value=7)
-            contas_mes = st.number_input("Água+Luz+Condo+IPTU+Gás (R$/mês)", value=float(d["agua"]+d["luz"]+d["condo"]+d["iptu"]+d["gas"]))
-            total_contas = contas_mes * meses
-            juros_obra = (v_prestacao * meses) if v_prestacao > 0 else (v_financiado * juros_mensal * meses)
-            total_b2 = reforma + total_contas + juros_obra
-        with col_mem2: st.metric("Total Intermediários", format_brl(total_b2))
-
-    # --- BLOCO 3: VENDA ---
-    with st.expander("🏷️ Venda e Lucro", expanded=True):
-        col_v1, col_v2 = st.columns([3, 2])
-        with col_v1:
-            v_venda = st.number_input("Preço de Venda (R$)", value=float(d["venda"]))
-            p_corretor = st.number_input("Comissão Corretor (%)", value=5.0)
-            v_comis = v_venda * (p_corretor / 100)
-            st.caption(f"Comissão Corretor: {format_brl(v_comis)}")
-            
-            p_imp = st.number_input("Imposto sobre Ganho (%)", value=15.0)
-            
-            invest_total = total_b1 + total_b2
-            lucro_bruto = (v_venda - v_comis) - v_financiado - invest_total
-            v_imp = max(0.0, lucro_bruto * (p_imp / 100))
-            lucro_liq = lucro_bruto - v_imp
-            roi = (lucro_liq / invest_total * 100) if invest_total > 0 else 0
-
-        with col_v2:
-            if lucro_liq >= 0:
-                st.success(f"### Lucro: {format_brl(lucro_liq)}\n### ROI: {roi:.2f}%")
-            else:
-                st.error(f"### Prejuízo: {format_brl(lucro_liq)}\n### ROI: {roi:.2f}%")
-
-    # --- BOTÃO PARA SALVAR SIMULAÇÃO ---
-    if st.button("💾 Salvar Simulação na Tabela"):
-        dados = {
-            "Data": datetime.now().strftime("%d/%m/%Y %H:%M"),
-            "Tipo": tipo_imovel,
-            "Avaliação": v_avaliacao,
-            "Lance": v_lance,
-            "Investimento Inicial": invest_total,
-            "Lucro Líquido": lucro_liq,
-            "ROI %": round(roi, 2)
-        }
-        salvar_dados(dados)
-        st.toast("Simulação salva com sucesso!", icon="✅")
-
-    # --- TABELA DE HISTÓRICO ---
-    st.markdown("---")
-    st.subheader("📜 Histórico de Simulações")
-    if os.path.exists("historico_simulacoes.csv"):
-        df_hist = pd.read_csv("historico_simulacoes.csv")
-        st.dataframe(df_hist, use_container_width=True)
-    else:
-        st.info("Nenhuma simulação salva ainda.")
-
-    # --- RELATÓRIO EXCEL ---
-    def exportar():
-        output = io.BytesIO()
         try:
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                pd.DataFrame([{"Data": datetime.now(), "Tipo": tipo_imovel, "Lucro": lucro_liq, "ROI %": roi}]).to_excel(writer, index=False, sheet_name='Resumo')
-                pd.DataFrame([
-                    {"Categoria": "Arrematação (Entrada + Docs)", "Valor": total_b1},
-                    {"Categoria": "Custos (Reforma + Manutenção)", "Valor": total_b2},
-                    {"Categoria": "Comissão Corretor", "Valor": v_comis},
-                    {"Categoria": "Imposto", "Valor": v_imp}
-                ]).to_excel(writer, index=False, sheet_name='Detalhes')
-            return output.getvalue()
-        except:
-            return None
+            df = pd.read_excel(arquivo, sheet_name='Relatório Detalhado')
+            for nome in nomes_das_zonas:
+                ultimo = df[df['Area'] == nome]['Total Acumulado'].tail(1).values
+                if len(ultimo) > 0: contagens[nome] = int(ultimo[0])
+        except: pass
+    return contagens
 
-    st.sidebar.markdown("---")
-    st.sidebar.download_button("📥 BAIXAR EXCEL ÚNICO", exportar(), f"simulacao_{tipo_imovel}.xlsx")
+def processar_v15_bloqueio_total():
+    global fator_x, fator_y, pontos_temporarios, todas_as_zonas_pontos, nomes_das_zonas
+    
+    pasta = r"C:\Users\aiosa\OneDrive\Clientes\Suzano\video_base"
+    arquivos = [f for f in os.listdir(pasta) if f.lower().endswith(('.mp4', '.avi'))]
+    if not arquivos: return
+    caminho_in = os.path.join(pasta, arquivos[0])
+
+    cap = cv2.VideoCapture(caminho_in)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    ret, frame_ref = cap.read()
+    if not ret: return
+
+    l_mon, a_mon = obter_resolucao_monitor()
+    l_vid, a_vid = int(cap.get(3)), int(cap.get(4))
+    fator_x, fator_y = l_mon / l_vid, a_mon / a_vid
+
+    cv2.namedWindow("Marcacao", cv2.WND_PROP_FULLSCREEN)
+    cv2.setWindowProperty("Marcacao", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    cv2.setMouseCallback("Marcacao", clique_mouse)
+
+    while True:
+        frame_draw = cv2.resize(frame_ref.copy(), (l_mon, a_mon))
+        for i, z in enumerate(todas_as_zonas_pontos):
+            pts = np.array([[int(p[0]*fator_x), int(p[1]*fator_y)] for p in z])
+            cv2.polylines(frame_draw, [pts], True, (0, 255, 0), 2)
+        if pontos_temporarios:
+            pts = np.array([[int(p[0]*fator_x), int(p[1]*fator_y)] for p in pontos_temporarios])
+            cv2.polylines(frame_draw, [pts], False, (255, 255, 0), 2)
+        cv2.imshow("Marcacao", frame_draw)
+        if cv2.waitKey(1) & 0xFF == ord('q'): break
+    cv2.destroyAllWindows()
+
+    contagem_sessao = [carregar_persistente().get(nome, 0) for nome in nomes_das_zonas]
+    
+    model = YOLO('yolov8n.pt') 
+    backSub = cv2.createBackgroundSubtractorMOG2(history=1200, varThreshold=50, detectShadows=True)
+    zonas = [sv.PolygonZone(polygon=p) for p in todas_as_zonas_pontos]
+    anotadores_zona = [sv.PolygonZoneAnnotator(zone=z, color=sv.Color.GREEN, thickness=2) for z in zonas]
+    zona_ocupada = [False for _ in zonas]
+
+    ts = datetime.now().strftime('%Y%m%d%H%M%S')
+    path_out = os.path.join(r"C:\Users\aiosa\OneDrive\Clientes\Suzano", f"resultado_{ts}.mp4")
+    out = cv2.VideoWriter(path_out, cv2.VideoWriter_fourcc(*'mp4v'), fps, (l_vid, a_vid))
+
+    ultimo_seg_log = -1
+
+    while cap.isOpened():
+        frame_id = cap.get(cv2.CAP_PROP_POS_FRAMES)
+        ret, frame = cap.read()
+        if not ret: break
+
+        segundo_atual = int(frame_id / fps)
+        results = model(frame, verbose=False, conf=0.45)[0]
+        # Bounding boxes de pessoas (caixas rosa/azul das imagens de exemplo)
+        pessoas_boxes = results.boxes.xyxy.cpu().numpy()[np.where(results.boxes.cls.cpu().numpy() == 0)[0]]
+
+        fg_mask = backSub.apply(frame)
+        _, fg_mask = cv2.threshold(fg_mask, 220, 255, cv2.THRESH_BINARY)
+        fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN, np.ones((5,5), np.uint8))
+
+        contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        detections_list = []
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if area < 15000: continue # Filtro de área mínima para fardos reais
+            
+            x, y, w, h = cv2.boundingRect(cnt)
+            centro_obj = (x + w//2, y + h//2)
+            
+            # BLOQUEIO CRÍTICO: Se houver qualquer pessoa num raio de 120px, ignora
+            perto_de_pessoa = False
+            for p_box in pessoas_boxes:
+                # Expansão agressiva da caixa da pessoa para englobar o que ela carrega
+                margem_exclusao = [p_box[0]-120, p_box[1]-120, p_box[2]+120, p_box[3]+120]
+                if (margem_exclusao[0] < centro_obj[0] < margem_exclusao[2]) and \
+                   (margem_exclusao[1] < centro_obj[1] < margem_exclusao[3]):
+                    perto_de_pessoa = True; break
+            
+            if not perto_de_pessoa:
+                detections_list.append([x, y, x+w, y+h])
+                cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 0), 2)
+
+        det_final = sv.Detections(xyxy=np.array(detections_list)) if detections_list else sv.Detections.empty()
+
+        # Barra Superior de Acompanhamento
+        cv2.rectangle(frame, (0, 0), (l_vid, 50), (220, 220, 220), -1)
+        tempo_str = f"Tempo: {segundo_atual // 60:02d}:{segundo_atual % 60:02d}"
+        texto_topo = tempo_str + " | "
+
+        for i, zona in enumerate(zonas):
+            mask = zona.trigger(detections=det_final)
+            if np.any(mask) and not zona_ocupada[i]:
+                contagem_sessao[i] += 70 # Valor fixo por fardo
+                zona_ocupada[i] = True
+            elif not np.any(mask):
+                zona_ocupada[i] = False
+
+            frame = anotadores_zona[i].annotate(scene=frame)
+            texto_topo += f"{nomes_das_zonas[i]}: {contagem_sessao[i]} | "
+            
+        if segundo_atual > ultimo_seg_log:
+            print(f"[ACOMPANHAMENTO] {tempo_str} -> {texto_topo.split('|', 1)[1].strip()}")
+            ultimo_seg_log = segundo_atual
+
+        cv2.putText(frame, texto_topo, (25, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2)
+        out.write(frame)
+        cv2.imshow("Suzano AI - Bloqueio de Objetos Manuais", cv2.resize(frame, (l_mon, a_mon)))
+        if cv2.waitKey(1) & 0xFF == ord('q'): break
+
+    cap.release()
+    out.release()
+    cv2.destroyAllWindows()
+    
+    # Salvar preservando dados
+    dados = [{'Data': datetime.now().strftime("%d/%m/%Y %H:%M"), 'Area': n, 'Total Acumulado': contagem_sessao[i]} 
+             for i, n in enumerate(nomes_das_zonas)]
+    salvar_excel_final(dados)
+
+def salvar_excel_final(dados):
+    arquivo = r"C:\Users\aiosa\OneDrive\Clientes\Suzano\relatorio_doc.xlsx"
+    df_novo = pd.DataFrame(dados)
+    if os.path.exists(arquivo):
+        with pd.ExcelWriter(arquivo, engine='openpyxl', mode='a', if_sheet_exists='overlay') as writer:
+            try:
+                df_antigo = pd.read_excel(arquivo, sheet_name='Relatório Detalhado')
+                pd.concat([df_antigo, df_novo], ignore_index=True).to_excel(writer, sheet_name='Relatório Detalhado', index=False)
+            except: df_novo.to_excel(writer, sheet_name='Relatório Detalhado', index=False)
+    else: df_novo.to_excel(arquivo, sheet_name='Relatório Detalhado', index=False)
 
 if __name__ == "__main__":
-    main()
-
-
-
-
+    processar_v15_bloqueio_total()
