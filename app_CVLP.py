@@ -252,8 +252,8 @@ def main():
             edited_df.to_csv(arquivo_hist, index=False, sep=';', encoding='utf-8-sig')
             st.rerun()
 
-        # Botões de ação alinhados com a tabela
-        col_btn1, col_btn2 = st.columns(2)
+        # Botões de ação com alinhamento
+        col_btn1, col_spacer, col_btn2 = st.columns([1, 6, 1])
         with col_btn1:
             # Botão de download CSV com separação correta por coluna (ponto e vírgula para Excel BR)
             df_download = formatar_csv_para_excel(edited_df)
