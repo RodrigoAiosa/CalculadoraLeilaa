@@ -44,14 +44,21 @@ def salvar_dados(nova_simulacao):
     df_novo = pd.DataFrame([nova_simulacao])
     
     if os.path.exists(arquivo):
-        # Lê usando vírgula para manter consistência
-        df_antigo = pd.read_csv(arquivo, sep=',')
+        # Lê pulando a primeira linha caso ela contenha a instrução 'sep=,'
+        try:
+            df_antigo = pd.read_csv(arquivo, sep=',', skiprows=0)
+            if df_antigo.columns[0] == 'sep=':
+                df_antigo = pd.read_csv(arquivo, sep=',', skiprows=1)
+        except:
+            df_antigo = pd.read_csv(arquivo, sep=',')
         df_final = pd.concat([df_antigo, df_novo], ignore_index=True)
     else:
         df_final = df_novo
         
-    # Salva usando vírgula como separador
-    df_final.to_csv(arquivo, index=False, sep=',')
+    # Salva com a instrução sep=, no topo para o Excel separar as colunas
+    with open(arquivo, 'w', encoding='utf-8-sig') as f:
+        f.write("sep=,\n")
+        df_final.to_csv(f, index=False, sep=',')
     return df_final
 
 # --- MOTOR DE SCRAPING ---
@@ -217,8 +224,11 @@ def main():
     arquivo_hist = "historico_simulacoes.csv"
     
     if os.path.exists(arquivo_hist):
-        # Lê usando vírgula
-        df_hist = pd.read_csv(arquivo_hist, sep=',')
+        # Lê o histórico ignorando a linha 'sep=,' se ela existir
+        try:
+            df_hist = pd.read_csv(arquivo_hist, sep=',', skiprows=1)
+        except:
+            df_hist = pd.read_csv(arquivo_hist, sep=',')
         
         edited_df = st.data_editor(
             df_hist, 
@@ -228,8 +238,10 @@ def main():
         )
         
         if len(edited_df) != len(df_hist):
-            # Salva usando vírgula
-            edited_df.to_csv(arquivo_hist, index=False, sep=',')
+            # Salva mantendo a instrução sep=,
+            with open(arquivo_hist, 'w', encoding='utf-8-sig') as f:
+                f.write("sep=,\n")
+                edited_df.to_csv(f, index=False, sep=',')
             st.rerun()
 
         if st.button("🗑️ Limpar Histórico de Simulações"):
