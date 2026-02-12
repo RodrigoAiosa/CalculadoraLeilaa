@@ -44,13 +44,13 @@ def salvar_dados(nova_simulacao):
     df_novo = pd.DataFrame([nova_simulacao])
     
     if os.path.exists(arquivo):
-        # Lê usando encoding utf-8-sig para não quebrar acentos
+        # Lê com utf-8-sig para preservar acentos existentes
         df_antigo = pd.read_csv(arquivo, sep=';', encoding='utf-8-sig')
         df_final = pd.concat([df_antigo, df_novo], ignore_index=True)
     else:
         df_final = df_novo
         
-    # Salva com Ponto e Vírgula e encoding específico para Excel não bugar acentos
+    # Salva com Ponto e Vírgula e encoding para Excel Brasil
     df_final.to_csv(arquivo, index=False, sep=';', encoding='utf-8-sig')
     return df_final
 
@@ -74,7 +74,9 @@ def robo_caixa():
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    
+    options.add_argument("--disable-gpu")
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+
     prefs = {"download.default_directory": download_dir, "download.prompt_for_download": False}
     options.add_experimental_option("prefs", prefs)
     
@@ -82,6 +84,7 @@ def robo_caixa():
     try:
         service = Service(executable_path=driver_path)
         driver = webdriver.Chrome(service=service, options=options)
+        driver.set_page_load_timeout(30)
         driver.get("https://venda-imoveis.caixa.gov.br/sistema/download-lista.asp")
         
         wait = WebDriverWait(driver, 25)
@@ -96,13 +99,13 @@ def robo_caixa():
         while time.time() - start < timeout:
             arquivos = glob.glob(os.path.join(download_dir, "*.csv"))
             if arquivos:
-                time.sleep(2)
+                time.sleep(3)
                 df = pd.read_csv(arquivos[0], sep=';', encoding='ISO-8859-1', skiprows=2)
                 df = tratar_texto_caixa(df)
                 csv_data = df.to_csv(index=False, sep=';', encoding='utf-8-sig')
                 driver.quit()
                 return csv_data, len(df)
-            time.sleep(2)
+            time.sleep(3)
     except Exception as e:
         if driver: driver.quit()
         return None, f"Erro: {str(e)}"
@@ -114,7 +117,7 @@ def main():
     if os.path.exists(caminho_logo):
         st.sidebar.image(caminho_logo, use_container_width=True)
 
-    st.title("⚖️ Calculadora de Viabilidade Leilão")
+    st.title("⚖️ Calculadora de Viabilidade Leilão - **ARREMATE SEM MEDO**")
 
     # --- SIDEBAR: PERFIS ---
     st.sidebar.header("🚀 Perfil de Investimento")
@@ -129,13 +132,21 @@ def main():
     }
     d = defaults[perfil]
 
-    # --- INPUTS (SIMPLIFICADO PARA O SCRIPT) ---
-    with st.expander("💵 Valores", expanded=True):
-        v_avaliacao = st.number_input("Valor de Avaliação (R$)", value=float(d["avaliacao"]))
-        v_lance = st.number_input("Valor do Lance (R$)", value=float(d["lance"]))
-        invest_total = v_lance * 1.1 # Exemplo
-        lucro_liq = (v_avaliacao - invest_total)
+    # --- CÁLCULOS ---
+    with st.expander("💵 Detalhes da Simulação", expanded=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            v_avaliacao = st.number_input("Valor de Avaliação (R$)", value=float(d["avaliacao"]))
+            v_lance = st.number_input("Valor do Lance (R$)", value=float(d["lance"]))
+            desocupa = st.number_input("Desocupação (R$)", value=float(d["desocupa"]))
+        with col2:
+            reforma = st.number_input("Reforma (R$)", value=float(d["reforma"]))
+            v_venda = st.number_input("Preço de Venda (R$)", value=float(d["venda"]))
+            
+        invest_total = v_lance + desocupa + reforma
+        lucro_liq = v_venda - invest_total
         roi = (lucro_liq / invest_total * 100) if invest_total > 0 else 0
+        st.metric("Lucro Líquido Estimado", format_brl(lucro_liq))
 
     # --- SALVAR ---
     if st.button("💾 Salvar Simulação na Tabela"):
@@ -149,7 +160,7 @@ def main():
             "ROI %": round(roi, 2)
         }
         salvar_dados(dados)
-        st.toast("Salvo!", icon="✅")
+        st.toast("Simulação arquivada!", icon="✅")
 
     # --- HISTÓRICO ---
     st.markdown("---")
@@ -159,39 +170,33 @@ def main():
     if os.path.exists(arquivo_hist):
         df_hist = pd.read_csv(arquivo_hist, sep=';', encoding='utf-8-sig')
         
-        # 1. REMOVE O BOTÃO DE DOWNLOAD NATIVO (QUE É O QUE BUGAVA TUDO)
-        # 2. ADICIONA O ÍCONE DE LIXEIRA NA ESQUERDA PARA EXCLUIR LINHAS
+        # Tabela com ícone de excluir (Lixeira) na lateral
         edited_df = st.data_editor(
             df_hist, 
             use_container_width=True, 
             num_rows="dynamic",
-            key="historico_editor",
-            column_config={
-                "Data": st.column_config.TextColumn(disabled=True),
-            }
+            key="historico_editor"
         )
         
-        # Se você deletar uma linha na tabela, ele salva o arquivo de novo
+        # Atualiza o arquivo se houver deleção
         if len(edited_df) != len(df_hist):
             edited_df.to_csv(arquivo_hist, index=False, sep=';', encoding='utf-8-sig')
             st.rerun()
 
-        # BOTÃO DE DOWNLOAD QUE REALMENTE FUNCIONA NO EXCEL BRASIL
-        st.write("Para baixar sem erros de colunas ou acentos, use o botão abaixo:")
-        csv_excel = edited_df.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
+        # BOTÃO DE DOWNLOAD EXCLUSIVO PARA EXCEL (SEM VÍRGULAS OU ERROS DE ACENTO)
+        csv_data = edited_df.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
         st.download_button(
-            label="📥 Baixar Histórico para Excel",
-            data=csv_excel,
+            label="📥 Baixar Histórico para Excel (Colunas Separadas)",
+            data=csv_data,
             file_name=f"historico_leilao_{datetime.now().strftime('%d_%m_%Y')}.csv",
             mime="text/csv",
         )
 
-        if st.button("🗑️ Limpar Tudo"):
+        if st.button("🗑️ Limpar Todo o Histórico"):
             os.remove(arquivo_hist)
             st.rerun()
     else:
-        st.info("Sem dados.")
+        st.info("O histórico está vazio.")
 
 if __name__ == "__main__":
     main()
-
