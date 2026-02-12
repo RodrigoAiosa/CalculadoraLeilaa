@@ -18,6 +18,14 @@ st.set_page_config(page_title="Calculadora de Viabilidade Leilão", layout="wide
 def format_brl(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+def formatar_csv_para_excel(df):
+    """Converte números com ponto decimal para vírgula para o padrão brasileiro do Excel"""
+    df_formatado = df.copy()
+    for col in df_formatado.columns:
+        if df_formatado[col].dtype in ['float64', 'int64']:
+            df_formatado[col] = df_formatado[col].apply(lambda x: str(x).replace('.', ',') if pd.notna(x) else x)
+    return df_formatado
+
 def tratar_texto_caixa(df):
     """Corrige os erros de codificação brutais da Caixa e remove espaços."""
     mapa = {
@@ -235,7 +243,8 @@ def main():
         col_btn1, col_btn2 = st.columns(2)
         with col_btn1:
             # Botão de download CSV com separação correta por coluna (ponto e vírgula para Excel BR)
-            csv_download = edited_df.to_csv(index=False, sep=';', encoding='utf-8-sig')
+            df_download = formatar_csv_para_excel(edited_df)
+            csv_download = df_download.to_csv(index=False, sep=';', encoding='utf-8-sig')
             st.download_button(
                 label="📥 Download as CSV",
                 data=csv_download,
