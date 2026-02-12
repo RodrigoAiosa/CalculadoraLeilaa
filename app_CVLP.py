@@ -19,7 +19,7 @@ def format_brl(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 def tratar_texto_caixa(df):
-    """Corrige os erros de codificação brutais da Caixa e remove espaços."""
+    """Corrige os erros de codificação da Caixa."""
     mapa = {
         'NÂ°': 'N°', 'imÃ³vel': 'imóvel', 'EndereÃ§o': 'Endereço', 
         'PreÃ§o': 'Preço', 'avaliaÃ§Ã£o': 'avaliação', 'DescriÃ§Ã£o': 'Descrição',
@@ -44,13 +44,13 @@ def salvar_dados(nova_simulacao):
     df_novo = pd.DataFrame([nova_simulacao])
     
     if os.path.exists(arquivo):
-        # Lê mantendo o padrão de ponto e vírgula
-        df_antigo = pd.read_csv(arquivo, sep=';', encoding='utf-8-sig')
+        # Lê o arquivo tratando a vírgula como decimal para não perder a precisão
+        df_antigo = pd.read_csv(arquivo, sep=';', decimal=',', encoding='utf-8-sig')
         df_final = pd.concat([df_antigo, df_novo], ignore_index=True)
     else:
         df_final = df_novo
         
-    # Salva usando ponto e vírgula (sep=';') e vírgula para decimais (decimal=',')
+    # Salva explicitamente com ponto e vírgula e decimal como vírgula
     df_final.to_csv(arquivo, index=False, sep=';', decimal=',', encoding='utf-8-sig')
     return df_final
 
@@ -165,7 +165,7 @@ def main():
     arquivo_hist = "historico_simulacoes.csv"
     
     if os.path.exists(arquivo_hist):
-        # Lê tratando o separador decimal como vírgula
+        # Lê garantindo que os decimais salvos como vírgula voltem a ser números no código
         df_hist = pd.read_csv(arquivo_hist, sep=';', decimal=',', encoding='utf-8-sig')
         
         edited_df = st.data_editor(
@@ -179,7 +179,7 @@ def main():
             edited_df.to_csv(arquivo_hist, index=False, sep=';', decimal=',', encoding='utf-8-sig')
             st.rerun()
 
-        # Botão de download atualizado com ponto e vírgula e decimal brasileiro
+        # BOTÃO DE DOWNLOAD COM CONVERSÃO FINAL PARA VÍRGULA
         csv_data = edited_df.to_csv(index=False, sep=';', decimal=',', encoding='utf-8-sig').encode('utf-8-sig')
         st.download_button(
             label="📥 Baixar Histórico para Excel (BR)",
@@ -189,7 +189,8 @@ def main():
         )
 
         if st.button("🗑️ Limpar Todo o Histórico"):
-            os.remove(arquivo_hist)
+            if os.path.exists(arquivo_hist):
+                os.remove(arquivo_hist)
             st.rerun()
     else:
         st.info("O histórico está vazio.")
