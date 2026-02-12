@@ -266,7 +266,7 @@ def main():
             )
         with col_btn2:
             # Botão para limpar histórico total
-            if st.button("🗑️ Limpar Histórico de Simulações"):
+            if st.button("🗑️ Limpar Histórico"):
                 os.remove(arquivo_hist)
                 st.rerun()
     else:
@@ -293,3 +293,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
