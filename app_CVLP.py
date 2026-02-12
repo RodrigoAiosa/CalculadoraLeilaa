@@ -231,10 +231,22 @@ def main():
             edited_df.to_csv(arquivo_hist, index=False)
             st.rerun()
 
-        # Botão para limpar histórico total
-        if st.button("🗑️ Limpar Histórico de Simulações"):
-            os.remove(arquivo_hist)
-            st.rerun()
+        # Botões de ação
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            # Botão de download CSV com separação correta por coluna
+            csv_download = edited_df.to_csv(index=False, sep=',', encoding='utf-8-sig')
+            st.download_button(
+                label="📥 Download as CSV",
+                data=csv_download,
+                file_name=f"historico_simulacoes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
+        with col_btn2:
+            # Botão para limpar histórico total
+            if st.button("🗑️ Limpar Histórico de Simulações"):
+                os.remove(arquivo_hist)
+                st.rerun()
     else:
         st.info("Nenhuma simulação salva ainda.")
 
