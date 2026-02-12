@@ -123,7 +123,7 @@ def main():
         if arquivos_imagem:
             st.sidebar.image(arquivos_imagem[0], use_container_width=True)
 
-    st.title("⚖️ Calculadora de Viabilidade Leilão - Profissional")
+    st.title("⚖️ Calculadora de Viabilidade Leilão \n\n **ARREMATE SEM MEDO**")
 
     # --- SIDEBAR: PERFIS ---
     st.sidebar.header("🚀 Perfil de Investimento")
@@ -252,5 +252,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
