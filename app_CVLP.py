@@ -19,7 +19,7 @@ def format_brl(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 def tratar_texto_caixa(df):
-    """Corrige os erros de codificação da Caixa."""
+    """Corrige os erros de codificação brutais da Caixa e remove espaços."""
     mapa = {
         'NÂ°': 'N°', 'imÃ³vel': 'imóvel', 'EndereÃ§o': 'Endereço', 
         'PreÃ§o': 'Preço', 'avaliaÃ§Ã£o': 'avaliação', 'DescriÃ§Ã£o': 'Descrição',
@@ -44,14 +44,12 @@ def salvar_dados(nova_simulacao):
     df_novo = pd.DataFrame([nova_simulacao])
     
     if os.path.exists(arquivo):
-        # Lê o arquivo tratando a vírgula como decimal para não perder a precisão
-        df_antigo = pd.read_csv(arquivo, sep=';', decimal=',', encoding='utf-8-sig')
+        df_antigo = pd.read_csv(arquivo)
         df_final = pd.concat([df_antigo, df_novo], ignore_index=True)
     else:
         df_final = df_novo
         
-    # Salva explicitamente com ponto e vírgula e decimal como vírgula
-    df_final.to_csv(arquivo, index=False, sep=';', decimal=',', encoding='utf-8-sig')
+    df_final.to_csv(arquivo, index=False)
     return df_final
 
 # --- MOTOR DE SCRAPING ---
@@ -67,7 +65,7 @@ def robo_caixa():
     driver_path = shutil.which("chromedriver")
 
     if not chrome_path or not driver_path:
-        return None, "Erro: Binários não encontrados."
+        return None, "Erro: Binários não encontrados. Verifique o packages.txt."
 
     options = webdriver.ChromeOptions()
     options.binary_location = chrome_path
@@ -113,9 +111,16 @@ def robo_caixa():
 
 # --- INTERFACE PRINCIPAL ---
 def main():
+    # --- LOGOTIPO NA SIDEBAR ---
     caminho_logo = "logo.jpg"
+    
     if os.path.exists(caminho_logo):
         st.sidebar.image(caminho_logo, use_container_width=True)
+    else:
+        st.sidebar.warning("Logo não encontrado no caminho local. Tentando pasta raiz...")
+        arquivos_imagem = glob.glob("logo.*")
+        if arquivos_imagem:
+            st.sidebar.image(arquivos_imagem[0], use_container_width=True)
 
     st.title("⚖️ Calculadora de Viabilidade Leilão - **ARREMATE SEM MEDO**")
 
@@ -132,21 +137,65 @@ def main():
     }
     d = defaults[perfil]
 
-    with st.expander("💵 Detalhes da Simulação", expanded=True):
-        col1, col2 = st.columns(2)
-        with col1:
+    # --- BLOCO 1: ARREMATAÇÃO ---
+    with st.expander("💵 Arrematação", expanded=True):
+        col_inp, col_mem = st.columns([3, 2])
+        with col_inp:
             v_avaliacao = st.number_input("Valor de Avaliação (R$)", value=float(d["avaliacao"]))
+            tipo_compra = st.radio("Pagamento:", ["À Vista", "Financiado"], horizontal=True)
             v_lance = st.number_input("Valor do Lance (R$)", value=float(d["lance"]))
-            desocupa = st.number_input("Desocupação (R$)", value=float(d["desocupa"]))
-        with col2:
-            reforma = st.number_input("Reforma (R$)", value=float(d["reforma"]))
-            v_venda = st.number_input("Preço de Venda (R$)", value=float(d["venda"]))
             
-        invest_total = v_lance + desocupa + reforma
-        lucro_liq = v_venda - invest_total
-        roi = (lucro_liq / invest_total * 100) if invest_total > 0 else 0
-        st.metric("Lucro Líquido Estimado", format_brl(lucro_liq))
+            v_entrada, v_financiado, juros_mensal, v_prestacao = 0.0, 0.0, 0.0, 0.0
+            if tipo_compra == "Financiado":
+                v_entrada = st.number_input("Entrada (R$)", value=float(v_lance * 0.20))
+                v_financiado = v_lance - v_entrada
+                j_anual = st.number_input("Taxa Juros (% a.a.)", value=9.5)
+                juros_mensal = (1 + j_anual/100)**(1/12) - 1
+                v_prestacao = st.number_input("Prestação Mensal (R$)", value=0.0)
+            else:
+                v_entrada = v_lance
 
+            taxas_docs = st.number_input("Leiloeiro/ITBI/Registro (R$)", value=float(v_lance * 0.08))
+            desocupa = st.number_input("Desocupação (R$)", value=float(d["desocupa"]))
+            total_b1 = v_entrada + taxas_docs + desocupa
+        with col_mem: st.metric("Total Arrematação", format_brl(total_b1))
+
+    # --- BLOCO 2: CUSTOS ---
+    with st.expander("🔗 Custos Intermediários", expanded=True):
+        col_inp2, col_mem2 = st.columns([3, 2])
+        with col_inp2:
+            reforma = st.number_input("Reforma (R$)", value=float(d["reforma"]))
+            meses = st.number_input("Meses até a Venda", value=7)
+            contas_mes = st.number_input("Água+Luz+Condo+IPTU+Gás (R$/mês)", value=float(d["agua"]+d["luz"]+d["condo"]+d["iptu"]+d["gas"]))
+            total_contas = contas_mes * meses
+            juros_obra = (v_prestacao * meses) if v_prestacao > 0 else (v_financiado * juros_mensal * meses)
+            total_b2 = reforma + total_contas + juros_obra
+        with col_mem2: st.metric("Total Intermediários", format_brl(total_b2))
+
+    # --- BLOCO 3: VENDA ---
+    with st.expander("🏷️ Venda e Lucro", expanded=True):
+        col_v1, col_v2 = st.columns([3, 2])
+        with col_v1:
+            v_venda = st.number_input("Preço de Venda (R$)", value=float(d["venda"]))
+            p_corretor = st.number_input("Comissão Corretor (%)", value=5.0)
+            v_comis = v_venda * (p_corretor / 100)
+            st.caption(f"Comissão Corretor: {format_brl(v_comis)}")
+            
+            p_imp = st.number_input("Imposto sobre Ganho (%)", value=15.0)
+            
+            invest_total = total_b1 + total_b2
+            lucro_bruto = (v_venda - v_comis) - v_financiado - invest_total
+            v_imp = max(0.0, lucro_bruto * (p_imp / 100))
+            lucro_liq = lucro_bruto - v_imp
+            roi = (lucro_liq / invest_total * 100) if invest_total > 0 else 0
+
+        with col_v2:
+            if lucro_liq >= 0:
+                st.success(f"### Lucro: {format_brl(lucro_liq)}\n### ROI: {roi:.2f}%")
+            else:
+                st.error(f"### Prejuízo: {format_brl(lucro_liq)}\n### ROI: {roi:.2f}%")
+
+    # --- BOTÃO PARA SALVAR SIMULAÇÃO ---
     if st.button("💾 Salvar Simulação na Tabela"):
         dados = {
             "Data": datetime.now().strftime("%d/%m/%Y %H:%M"),
@@ -158,42 +207,41 @@ def main():
             "ROI %": round(roi, 2)
         }
         salvar_dados(dados)
-        st.toast("Simulação arquivada!", icon="✅")
+        st.toast("Simulação salva com sucesso!", icon="✅")
 
+    # --- TABELA DE HISTÓRICO ---
     st.markdown("---")
     st.subheader("📜 Histórico de Simulações")
     arquivo_hist = "historico_simulacoes.csv"
-    
     if os.path.exists(arquivo_hist):
-        # Lê garantindo que os decimais salvos como vírgula voltem a ser números no código
-        df_hist = pd.read_csv(arquivo_hist, sep=';', decimal=',', encoding='utf-8-sig')
+        df_hist = pd.read_csv(arquivo_hist)
+        st.dataframe(df_hist, use_container_width=True)
         
-        edited_df = st.data_editor(
-            df_hist, 
-            use_container_width=True, 
-            num_rows="dynamic",
-            key="historico_editor"
-        )
-        
-        if len(edited_df) != len(df_hist):
-            edited_df.to_csv(arquivo_hist, index=False, sep=';', decimal=',', encoding='utf-8-sig')
-            st.rerun()
-
-        # BOTÃO DE DOWNLOAD COM CONVERSÃO FINAL PARA VÍRGULA
-        csv_data = edited_df.to_csv(index=False, sep=';', decimal=',', encoding='utf-8-sig').encode('utf-8-sig')
-        st.download_button(
-            label="📥 Baixar Histórico para Excel (BR)",
-            data=csv_data,
-            file_name=f"historico_leilao_{datetime.now().strftime('%d_%m_%Y')}.csv",
-            mime="text/csv",
-        )
-
-        if st.button("🗑️ Limpar Todo o Histórico"):
-            if os.path.exists(arquivo_hist):
-                os.remove(arquivo_hist)
+        # Botão para limpar histórico
+        if st.button("🗑️ Limpar Histórico de Simulações"):
+            os.remove(arquivo_hist)
             st.rerun()
     else:
-        st.info("O histórico está vazio.")
+        st.info("Nenhuma simulação salva ainda.")
+
+    # --- RELATÓRIO EXCEL ---
+    def exportar():
+        output = io.BytesIO()
+        try:
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                pd.DataFrame([{"Data": datetime.now(), "Tipo": tipo_imovel, "Lucro": lucro_liq, "ROI %": roi}]).to_excel(writer, index=False, sheet_name='Resumo')
+                pd.DataFrame([
+                    {"Categoria": "Arrematação (Entrada + Docs)", "Valor": total_b1},
+                    {"Categoria": "Custos (Reforma + Manutenção)", "Valor": total_b2},
+                    {"Categoria": "Comissão Corretor", "Valor": v_comis},
+                    {"Categoria": "Imposto", "Valor": v_imp}
+                ]).to_excel(writer, index=False, sheet_name='Detalhes')
+            return output.getvalue()
+        except:
+            return None
+
+    st.sidebar.markdown("---")
+    st.sidebar.download_button("📥 BAIXAR EXCEL ÚNICO", exportar(), f"simulacao_{tipo_imovel}.xlsx")
 
 if __name__ == "__main__":
     main()
