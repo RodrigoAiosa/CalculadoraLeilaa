@@ -112,7 +112,6 @@ def robo_caixa():
 # --- INTERFACE PRINCIPAL ---
 def main():
     # --- LOGOTIPO NA SIDEBAR ---
-    # Usando r"" para evitar erro de escape no Windows
     caminho_logo = "logo.jpg"
     
     if os.path.exists(caminho_logo):
@@ -137,18 +136,6 @@ def main():
         "Alto Padrão": {"avaliacao": 2500000.0, "lance": 1300000.0, "desocupa": 0.0, "reforma": 120000.0, "condo": 2200.0, "iptu": 900.0, "venda": 2200000.0, "agua": 180.0, "luz": 650.0, "gas": 150.0}
     }
     d = defaults[perfil]
-
-    # --- EXTRAÇÃO CAIXA ---
-    # with st.expander("🏢 Extrair Lista da Caixa", expanded=False):
-    #     if st.button("🚀 Rodar Robô de Coleta"):
-    #         with st.status("Extraindo dados...", expanded=True) as status:
-    #             csv, qtd = robo_caixa()
-    #             if csv:
-    #                 status.update(label="Coleta Finalizada!", state="complete")
-    #                 st.download_button("💾 Baixar CSV da Caixa", csv, "lista_caixa.csv", "text/csv")
-    #             else:
-    #                 status.update(label="Falha na Coleta", state="error")
-    #                 st.error(qtd)
 
     # --- BLOCO 1: ARREMATAÇÃO ---
     with st.expander("💵 Arrematação", expanded=True):
@@ -225,9 +212,15 @@ def main():
     # --- TABELA DE HISTÓRICO ---
     st.markdown("---")
     st.subheader("📜 Histórico de Simulações")
-    if os.path.exists("historico_simulacoes.csv"):
-        df_hist = pd.read_csv("historico_simulacoes.csv")
+    arquivo_hist = "historico_simulacoes.csv"
+    if os.path.exists(arquivo_hist):
+        df_hist = pd.read_csv(arquivo_hist)
         st.dataframe(df_hist, use_container_width=True)
+        
+        # Botão para limpar histórico
+        if st.button("🗑️ Limpar Histórico de Simulações"):
+            os.remove(arquivo_hist)
+            st.rerun()
     else:
         st.info("Nenhuma simulação salva ainda.")
 
@@ -252,6 +245,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
