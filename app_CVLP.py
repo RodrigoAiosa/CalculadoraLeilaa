@@ -44,14 +44,14 @@ def salvar_dados(nova_simulacao):
     df_novo = pd.DataFrame([nova_simulacao])
     
     if os.path.exists(arquivo):
-        # Lê com utf-8-sig para preservar acentos existentes
+        # Lê mantendo o padrão de ponto e vírgula
         df_antigo = pd.read_csv(arquivo, sep=';', encoding='utf-8-sig')
         df_final = pd.concat([df_antigo, df_novo], ignore_index=True)
     else:
         df_final = df_novo
         
-    # Salva com Ponto e Vírgula e encoding para Excel Brasil
-    df_final.to_csv(arquivo, index=False, sep=';', encoding='utf-8-sig')
+    # Salva usando ponto e vírgula (sep=';') e vírgula para decimais (decimal=',')
+    df_final.to_csv(arquivo, index=False, sep=';', decimal=',', encoding='utf-8-sig')
     return df_final
 
 # --- MOTOR DE SCRAPING ---
@@ -132,7 +132,6 @@ def main():
     }
     d = defaults[perfil]
 
-    # --- CÁLCULOS ---
     with st.expander("💵 Detalhes da Simulação", expanded=True):
         col1, col2 = st.columns(2)
         with col1:
@@ -148,7 +147,6 @@ def main():
         roi = (lucro_liq / invest_total * 100) if invest_total > 0 else 0
         st.metric("Lucro Líquido Estimado", format_brl(lucro_liq))
 
-    # --- SALVAR ---
     if st.button("💾 Salvar Simulação na Tabela"):
         dados = {
             "Data": datetime.now().strftime("%d/%m/%Y %H:%M"),
@@ -162,15 +160,14 @@ def main():
         salvar_dados(dados)
         st.toast("Simulação arquivada!", icon="✅")
 
-    # --- HISTÓRICO ---
     st.markdown("---")
     st.subheader("📜 Histórico de Simulações")
     arquivo_hist = "historico_simulacoes.csv"
     
     if os.path.exists(arquivo_hist):
-        df_hist = pd.read_csv(arquivo_hist, sep=';', encoding='utf-8-sig')
+        # Lê tratando o separador decimal como vírgula
+        df_hist = pd.read_csv(arquivo_hist, sep=';', decimal=',', encoding='utf-8-sig')
         
-        # Tabela com ícone de excluir (Lixeira) na lateral
         edited_df = st.data_editor(
             df_hist, 
             use_container_width=True, 
@@ -178,15 +175,14 @@ def main():
             key="historico_editor"
         )
         
-        # Atualiza o arquivo se houver deleção
         if len(edited_df) != len(df_hist):
-            edited_df.to_csv(arquivo_hist, index=False, sep=';', encoding='utf-8-sig')
+            edited_df.to_csv(arquivo_hist, index=False, sep=';', decimal=',', encoding='utf-8-sig')
             st.rerun()
 
-        # BOTÃO DE DOWNLOAD EXCLUSIVO PARA EXCEL (SEM VÍRGULAS OU ERROS DE ACENTO)
-        csv_data = edited_df.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
+        # Botão de download atualizado com ponto e vírgula e decimal brasileiro
+        csv_data = edited_df.to_csv(index=False, sep=';', decimal=',', encoding='utf-8-sig').encode('utf-8-sig')
         st.download_button(
-            label="📥 Baixar Histórico para Excel",
+            label="📥 Baixar Histórico para Excel (BR)",
             data=csv_data,
             file_name=f"historico_leilao_{datetime.now().strftime('%d_%m_%Y')}.csv",
             mime="text/csv",
@@ -200,4 +196,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
