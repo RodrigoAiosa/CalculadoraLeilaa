@@ -259,7 +259,7 @@ def main():
             df_download = formatar_csv_para_excel(edited_df)
             csv_download = df_download.to_csv(index=False, sep=';', encoding='utf-8-sig')
             st.download_button(
-                label="📥 Download as CSV",
+                label="📥 Download ",
                 data=csv_download,
                 file_name=f"historico_simulacoes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                 mime="text/csv"
@@ -293,5 +293,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
