@@ -44,12 +44,14 @@ def salvar_dados(nova_simulacao):
     df_novo = pd.DataFrame([nova_simulacao])
     
     if os.path.exists(arquivo):
-        df_antigo = pd.read_csv(arquivo)
+        # Lê usando vírgula para manter consistência
+        df_antigo = pd.read_csv(arquivo, sep=',')
         df_final = pd.concat([df_antigo, df_novo], ignore_index=True)
     else:
         df_final = df_novo
         
-    df_final.to_csv(arquivo, index=False)
+    # Salva usando vírgula como separador
+    df_final.to_csv(arquivo, index=False, sep=',')
     return df_final
 
 # --- MOTOR DE SCRAPING ---
@@ -215,10 +217,9 @@ def main():
     arquivo_hist = "historico_simulacoes.csv"
     
     if os.path.exists(arquivo_hist):
-        df_hist = pd.read_csv(arquivo_hist)
+        # Lê usando vírgula
+        df_hist = pd.read_csv(arquivo_hist, sep=',')
         
-        # O data_editor permite o ícone de lixeira (que remove a linha)
-        # Ao clicar no ícone de lixeira ao lado do índice, a linha é marcada para deleção
         edited_df = st.data_editor(
             df_hist, 
             use_container_width=True, 
@@ -226,12 +227,11 @@ def main():
             key="historico_editor"
         )
         
-        # Se o número de linhas mudar, salvamos o novo arquivo
         if len(edited_df) != len(df_hist):
-            edited_df.to_csv(arquivo_hist, index=False)
+            # Salva usando vírgula
+            edited_df.to_csv(arquivo_hist, index=False, sep=',')
             st.rerun()
 
-        # Botão para limpar histórico total
         if st.button("🗑️ Limpar Histórico de Simulações"):
             os.remove(arquivo_hist)
             st.rerun()
