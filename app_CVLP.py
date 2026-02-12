@@ -15,15 +15,18 @@ nomes_das_zonas = []
 fator_x, fator_y = 1.0, 1.0
 
 def obter_resolucao_monitor():
-    root = tk.Tk()
-    l, a = root.winfo_screenwidth(), root.winfo_screenheight()
-    root.destroy()
-    return l, a
+    try:
+        root = tk.Tk()
+        l, a = root.winfo_screenwidth(), root.winfo_screenheight()
+        root.destroy()
+        return l, a
+    except:
+        return 1280, 720 # Fallback para servidores sem monitor
 
 def pedir_nome_zona():
     root = tk.Tk()
     root.withdraw()
-    # Largura corrigida para exibir o título completo
+    # Largura ajustada para exibir o título completo 'Nova Área'
     prompt = " " * 60 + "\nDigite o nome desta zona de carga:"
     nome = simpledialog.askstring("Nova Área", prompt, 
                                   initialvalue=f"Area_{len(todas_as_zonas_pontos)+1}")
@@ -55,10 +58,14 @@ def carregar_persistente():
         except: pass
     return contagens
 
-def processar_v15_bloqueio_total():
+def processar_v16_streamlit_ready():
     global fator_x, fator_y, pontos_temporarios, todas_as_zonas_pontos, nomes_das_zonas
     
     pasta = r"C:\Users\aiosa\OneDrive\Clientes\Suzano\video_base"
+    if not os.path.exists(pasta):
+        print("Erro: Pasta de vídeos não encontrada.")
+        return
+        
     arquivos = [f for f in os.listdir(pasta) if f.lower().endswith(('.mp4', '.avi'))]
     if not arquivos: return
     caminho_in = os.path.join(pasta, arquivos[0])
@@ -72,6 +79,7 @@ def processar_v15_bloqueio_total():
     l_vid, a_vid = int(cap.get(3)), int(cap.get(4))
     fator_x, fator_y = l_mon / l_vid, a_mon / a_vid
 
+    # --- ETAPA DE MARCAÇÃO ---
     cv2.namedWindow("Marcacao", cv2.WND_PROP_FULLSCREEN)
     cv2.setWindowProperty("Marcacao", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
     cv2.setMouseCallback("Marcacao", clique_mouse)
@@ -109,7 +117,6 @@ def processar_v15_bloqueio_total():
 
         segundo_atual = int(frame_id / fps)
         results = model(frame, verbose=False, conf=0.45)[0]
-        # Bounding boxes de pessoas (caixas rosa/azul das imagens de exemplo)
         pessoas_boxes = results.boxes.xyxy.cpu().numpy()[np.where(results.boxes.cls.cpu().numpy() == 0)[0]]
 
         fg_mask = backSub.apply(frame)
@@ -120,15 +127,14 @@ def processar_v15_bloqueio_total():
         detections_list = []
         for cnt in contours:
             area = cv2.contourArea(cnt)
-            if area < 15000: continue # Filtro de área mínima para fardos reais
+            if area < 15000: continue 
             
             x, y, w, h = cv2.boundingRect(cnt)
             centro_obj = (x + w//2, y + h//2)
             
-            # BLOQUEIO CRÍTICO: Se houver qualquer pessoa num raio de 120px, ignora
+            # BLOQUEIO REFORÇADO: Raio de 120px para ignorar pessoas com panos
             perto_de_pessoa = False
             for p_box in pessoas_boxes:
-                # Expansão agressiva da caixa da pessoa para englobar o que ela carrega
                 margem_exclusao = [p_box[0]-120, p_box[1]-120, p_box[2]+120, p_box[3]+120]
                 if (margem_exclusao[0] < centro_obj[0] < margem_exclusao[2]) and \
                    (margem_exclusao[1] < centro_obj[1] < margem_exclusao[3]):
@@ -140,7 +146,7 @@ def processar_v15_bloqueio_total():
 
         det_final = sv.Detections(xyxy=np.array(detections_list)) if detections_list else sv.Detections.empty()
 
-        # Barra Superior de Acompanhamento
+        # Barra Cinza de Acompanhamento
         cv2.rectangle(frame, (0, 0), (l_vid, 50), (220, 220, 220), -1)
         tempo_str = f"Tempo: {segundo_atual // 60:02d}:{segundo_atual % 60:02d}"
         texto_topo = tempo_str + " | "
@@ -148,7 +154,7 @@ def processar_v15_bloqueio_total():
         for i, zona in enumerate(zonas):
             mask = zona.trigger(detections=det_final)
             if np.any(mask) and not zona_ocupada[i]:
-                contagem_sessao[i] += 70 # Valor fixo por fardo
+                contagem_sessao[i] += 70 # Métrica Suzano
                 zona_ocupada[i] = True
             elif not np.any(mask):
                 zona_ocupada[i] = False
@@ -162,14 +168,14 @@ def processar_v15_bloqueio_total():
 
         cv2.putText(frame, texto_topo, (25, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2)
         out.write(frame)
-        cv2.imshow("Suzano AI - Bloqueio de Objetos Manuais", cv2.resize(frame, (l_mon, a_mon)))
+        cv2.imshow("Monitoramento - V16", cv2.resize(frame, (l_mon, a_mon)))
         if cv2.waitKey(1) & 0xFF == ord('q'): break
 
     cap.release()
     out.release()
     cv2.destroyAllWindows()
     
-    # Salvar preservando dados
+    # Salvar e preservar dados
     dados = [{'Data': datetime.now().strftime("%d/%m/%Y %H:%M"), 'Area': n, 'Total Acumulado': contagem_sessao[i]} 
              for i, n in enumerate(nomes_das_zonas)]
     salvar_excel_final(dados)
@@ -186,4 +192,4 @@ def salvar_excel_final(dados):
     else: df_novo.to_excel(arquivo, sheet_name='Relatório Detalhado', index=False)
 
 if __name__ == "__main__":
-    processar_v15_bloqueio_total()
+    processar_v16_streamlit_ready()
