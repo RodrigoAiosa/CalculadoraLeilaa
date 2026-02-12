@@ -1,4 +1,6 @@
-streamlit
+opencv-python-headless
 pandas
-selenium
-xlsxwriter
+numpy
+ultralytics
+supervision
+openpyxl
