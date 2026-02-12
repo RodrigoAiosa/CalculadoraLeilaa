@@ -200,10 +200,10 @@ def main():
         dados = {
             "Data": datetime.now().strftime("%d/%m/%Y %H:%M"),
             "Tipo": tipo_imovel,
-            "Avaliação": v_avaliacao,
+            "Avaliacao": v_avaliacao,
             "Lance": v_lance,
             "Investimento Inicial": invest_total,
-            "Lucro Líquido": lucro_liq,
+            "Lucro Liquido": lucro_liq,
             "ROI %": round(roi, 2)
         }
         salvar_dados(dados)
