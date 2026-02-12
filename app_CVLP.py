@@ -262,12 +262,11 @@ def main():
                 label="📥 Download as CSV",
                 data=csv_download,
                 file_name=f"historico_simulacoes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv",
-                use_container_width=True
+                mime="text/csv"
             )
         with col_btn2:
             # Botão para limpar histórico total
-            if st.button("🗑️ Limpar Histórico de Simulações", use_container_width=True):
+            if st.button("🗑️ Limpar Histórico de Simulações"):
                 os.remove(arquivo_hist)
                 st.rerun()
     else:
