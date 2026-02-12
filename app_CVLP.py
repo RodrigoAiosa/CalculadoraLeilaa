@@ -19,11 +19,24 @@ def format_brl(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 def formatar_csv_para_excel(df):
-    """Converte números com ponto decimal para vírgula para o padrão brasileiro do Excel"""
+    """Converte números com ponto decimal para vírgula e adiciona formatação de moeda"""
     df_formatado = df.copy()
+    
+    # Colunas que devem ser formatadas como moeda
+    colunas_moeda = ['Avaliacao', 'Lance', 'Investimento Inicial', 'Lucro Liquido']
+    
     for col in df_formatado.columns:
         if df_formatado[col].dtype in ['float64', 'int64']:
-            df_formatado[col] = df_formatado[col].apply(lambda x: str(x).replace('.', ',') if pd.notna(x) else x)
+            if col in colunas_moeda:
+                # Formatar como moeda brasileira
+                df_formatado[col] = df_formatado[col].apply(
+                    lambda x: f'R$ {x:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.') if pd.notna(x) else x
+                )
+            else:
+                # Apenas substituir ponto por vírgula (para ROI % e outros números)
+                df_formatado[col] = df_formatado[col].apply(
+                    lambda x: str(x).replace('.', ',') if pd.notna(x) else x
+                )
     return df_formatado
 
 def tratar_texto_caixa(df):
