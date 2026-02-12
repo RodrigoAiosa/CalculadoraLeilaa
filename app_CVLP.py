@@ -44,12 +44,12 @@ def salvar_dados(nova_simulacao):
     df_novo = pd.DataFrame([nova_simulacao])
     
     if os.path.exists(arquivo):
-        df_antigo = pd.read_csv(arquivo)
+        df_antigo = pd.read_csv(arquivo, sep=';', encoding='utf-8-sig')
         df_final = pd.concat([df_antigo, df_novo], ignore_index=True)
     else:
         df_final = df_novo
         
-    df_final.to_csv(arquivo, index=False)
+    df_final.to_csv(arquivo, index=False, sep=';', encoding='utf-8-sig')
     return df_final
 
 # --- MOTOR DE SCRAPING ---
@@ -215,7 +215,7 @@ def main():
     arquivo_hist = "historico_simulacoes.csv"
     
     if os.path.exists(arquivo_hist):
-        df_hist = pd.read_csv(arquivo_hist)
+        df_hist = pd.read_csv(arquivo_hist, sep=';', encoding='utf-8-sig')
         
         # O data_editor permite o ícone de lixeira (que remove a linha)
         # Ao clicar no ícone de lixeira ao lado do índice, a linha é marcada para deleção
@@ -228,14 +228,14 @@ def main():
         
         # Se o número de linhas mudar, salvamos o novo arquivo
         if len(edited_df) != len(df_hist):
-            edited_df.to_csv(arquivo_hist, index=False)
+            edited_df.to_csv(arquivo_hist, index=False, sep=';', encoding='utf-8-sig')
             st.rerun()
 
         # Botões de ação
         col_btn1, col_btn2 = st.columns(2)
         with col_btn1:
-            # Botão de download CSV com separação correta por coluna
-            csv_download = edited_df.to_csv(index=False, sep=',', encoding='utf-8-sig')
+            # Botão de download CSV com separação correta por coluna (ponto e vírgula para Excel BR)
+            csv_download = edited_df.to_csv(index=False, sep=';', encoding='utf-8-sig')
             st.download_button(
                 label="📥 Download as CSV",
                 data=csv_download,
