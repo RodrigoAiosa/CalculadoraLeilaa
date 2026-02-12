@@ -44,21 +44,14 @@ def salvar_dados(nova_simulacao):
     df_novo = pd.DataFrame([nova_simulacao])
     
     if os.path.exists(arquivo):
-        # Lê pulando a primeira linha caso ela contenha a instrução 'sep=,'
-        try:
-            df_antigo = pd.read_csv(arquivo, sep=',', skiprows=0)
-            if df_antigo.columns[0] == 'sep=':
-                df_antigo = pd.read_csv(arquivo, sep=',', skiprows=1)
-        except:
-            df_antigo = pd.read_csv(arquivo, sep=',')
+        # Usamos ponto e vírgula para leitura e escrita
+        df_antigo = pd.read_csv(arquivo, sep=';')
         df_final = pd.concat([df_antigo, df_novo], ignore_index=True)
     else:
         df_final = df_novo
         
-    # Salva com a instrução sep=, no topo para o Excel separar as colunas
-    with open(arquivo, 'w', encoding='utf-8-sig') as f:
-        f.write("sep=,\n")
-        df_final.to_csv(f, index=False, sep=',')
+    # Salva com ponto e vírgula (padrão Excel Brasil)
+    df_final.to_csv(arquivo, index=False, sep=';', encoding='utf-8-sig')
     return df_final
 
 # --- MOTOR DE SCRAPING ---
@@ -224,12 +217,11 @@ def main():
     arquivo_hist = "historico_simulacoes.csv"
     
     if os.path.exists(arquivo_hist):
-        # Lê o histórico ignorando a linha 'sep=,' se ela existir
-        try:
-            df_hist = pd.read_csv(arquivo_hist, sep=',', skiprows=1)
-        except:
-            df_hist = pd.read_csv(arquivo_hist, sep=',')
+        df_hist = pd.read_csv(arquivo_hist, sep=';')
         
+        # O data_editor do Streamlit sempre exporta como vírgula no botão nativo.
+        # Por isso, vamos adicionar um botão de download personalizado abaixo dele
+        # para garantir que o arquivo baixado funcione no seu Excel.
         edited_df = st.data_editor(
             df_hist, 
             use_container_width=True, 
@@ -238,11 +230,18 @@ def main():
         )
         
         if len(edited_df) != len(df_hist):
-            # Salva mantendo a instrução sep=,
-            with open(arquivo_hist, 'w', encoding='utf-8-sig') as f:
-                f.write("sep=,\n")
-                edited_df.to_csv(f, index=False, sep=',')
+            edited_df.to_csv(arquivo_hist, index=False, sep=';', encoding='utf-8-sig')
             st.rerun()
+
+        # BOTÃO DE DOWNLOAD CORRETO PARA EXCEL BRASIL
+        csv_buffer = io.StringIO()
+        edited_df.to_csv(csv_buffer, index=False, sep=';', encoding='utf-8-sig')
+        st.download_button(
+            label="📥 Baixar Histórico formatado para Excel",
+            data=csv_buffer.getvalue(),
+            file_name=f"historico_leilao_{datetime.now().strftime('%d_%m_%Y')}.csv",
+            mime="text/csv",
+        )
 
         if st.button("🗑️ Limpar Histórico de Simulações"):
             os.remove(arquivo_hist)
