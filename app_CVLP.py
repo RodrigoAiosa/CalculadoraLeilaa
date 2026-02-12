@@ -180,7 +180,7 @@ def main():
         st.write("Para baixar sem erros de colunas ou acentos, use o botão abaixo:")
         csv_excel = edited_df.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
         st.download_button(
-            label="📥 Baixar Histórico para Excel (Correto)",
+            label="📥 Baixar Histórico para Excel",
             data=csv_excel,
             file_name=f"historico_leilao_{datetime.now().strftime('%d_%m_%Y')}.csv",
             mime="text/csv",
@@ -194,3 +194,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
