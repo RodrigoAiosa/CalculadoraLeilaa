@@ -19,18 +19,15 @@ def format_brl(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 def preparar_para_excel_br(df):
-    """
-    ESSA FUNÇÃO É A QUE MATA O PONTO: 
-    Converte tudo que é número para texto com vírgula antes de salvar.
-    """
+    """Força a conversão de todos os decimais para vírgula em formato texto para o Excel não bugar."""
     df_br = df.copy()
     for col in df_br.columns:
         if pd.api.types.is_numeric_dtype(df_br[col]):
-            # Substitui ponto por vírgula e garante que seja string para o Excel não converter de volta
             df_br[col] = df_br[col].apply(lambda x: str(round(x, 2)).replace('.', ','))
     return df_br
 
 def tratar_texto_caixa(df):
+    """Corrige os erros de codificação da Caixa."""
     mapa = {
         'NÂ°': 'N°', 'imÃ³vel': 'imóvel', 'EndereÃ§o': 'Endereço', 
         'PreÃ§o': 'Preço', 'avaliaÃ§Ã£o': 'avaliação', 'DescriÃ§Ã£o': 'Descrição',
@@ -41,6 +38,12 @@ def tratar_texto_caixa(df):
         for erro, correto in mapa.items():
             if erro in col:
                 df.rename(columns={col: col.replace(erro, correto)}, inplace=True)
+    
+    cols_obj = df.select_dtypes(include=['object']).columns
+    for col in cols_obj:
+        for erro, correto in mapa.items():
+            if col in df.columns:
+                df[col] = df[col].astype(str).str.replace(erro, correto)
     return df
 
 # --- FUNÇÃO PARA SALVAR E ACUMULAR DADOS ---
@@ -49,7 +52,6 @@ def salvar_dados(nova_simulacao):
     df_novo = pd.DataFrame([nova_simulacao])
     
     if os.path.exists(arquivo):
-        # Lê mantendo a consistência brasileira
         df_antigo = pd.read_csv(arquivo, sep=';', decimal=',', encoding='utf-8-sig')
         df_final = pd.concat([df_antigo, df_novo], ignore_index=True)
     else:
@@ -58,10 +60,11 @@ def salvar_dados(nova_simulacao):
     df_final.to_csv(arquivo, index=False, sep=';', decimal=',', encoding='utf-8-sig')
     return df_final
 
-# --- MOTOR DE SCRAPING CAIXA ---
+# --- MOTOR DE SCRAPING ---
 def robo_caixa():
     download_dir = os.path.join(os.getcwd(), "temp_caixa")
     if not os.path.exists(download_dir): os.makedirs(download_dir)
+    
     for f in glob.glob(os.path.join(download_dir, "*.csv")):
         try: os.remove(f)
         except: pass
@@ -83,9 +86,13 @@ def robo_caixa():
         service = Service(executable_path=driver_path)
         driver = webdriver.Chrome(service=service, options=options)
         driver.get("https://venda-imoveis.caixa.gov.br/sistema/download-lista.asp")
+        
         wait = WebDriverWait(driver, 25)
-        Select(wait.until(EC.presence_of_element_located((By.ID, "cmb_estado")))).select_by_value("geral")
-        driver.execute_script("arguments[0].click();", wait.until(EC.element_to_be_clickable((By.ID, "btn_next1"))))
+        dropdown = wait.until(EC.presence_of_element_located((By.ID, "cmb_estado")))
+        Select(dropdown).select_by_value("geral")
+        
+        btn = wait.until(EC.element_to_be_clickable((By.ID, "btn_next1")))
+        driver.execute_script("arguments[0].click();", btn)
 
         timeout = 90
         start = time.time()
@@ -125,26 +132,34 @@ def main():
     }
     d = defaults[perfil]
 
-    with st.expander("💵 Valores e Custos", expanded=True):
+    with st.expander("💵 Valores e Custos de Aquisição", expanded=True):
         col1, col2 = st.columns(2)
         with col1:
             v_avaliacao = st.number_input("Valor de Avaliação (R$)", value=float(d["avaliacao"]))
             v_lance = st.number_input("Valor do Lance (R$)", value=float(d["lance"]))
-            v_venda = st.number_input("Expectativa de Venda (R$)", value=float(d["venda"]))
+            comissao_leiloeiro = v_lance * 0.05
+            itbi = v_lance * 0.03
+            escritura = 3500.0
         with col2:
             desocupa = st.number_input("Custos Desocupação (R$)", value=float(d["desocupa"]))
             reforma = st.number_input("Custos Reforma (R$)", value=float(d["reforma"]))
-            outros = st.number_input("Outros Custos (Condo/IPTU/Água)", value=float(d["condo"] + d["iptu"]))
+            v_venda = st.number_input("Expectativa de Venda (R$)", value=float(d["venda"]))
 
-    invest_total = v_lance + desocupa + reforma + outros
+    with st.expander("📅 Custos Mensais (Carregamento - 6 meses)"):
+        meses = st.slider("Meses até a venda", 1, 24, 6)
+        c_condo = st.number_input("Condomínio Mensal", value=float(d["condo"]))
+        c_iptu = st.number_input("IPTU Mensal", value=float(d["iptu"]))
+        total_mensal = (c_condo + c_iptu) * meses
+
+    invest_total = v_lance + comissao_leiloeiro + itbi + escritura + desocupa + reforma + total_mensal
     lucro_liq = v_venda - invest_total
     roi = (lucro_liq / invest_total * 100) if invest_total > 0 else 0
 
     st.divider()
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Investimento Total", format_brl(invest_total))
-    c2.metric("Lucro Líquido", format_brl(lucro_liq))
-    c3.metric("ROI %", f"{roi:.2f}%")
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Investimento Total", format_brl(invest_total))
+    m2.metric("Lucro Líquido", format_brl(lucro_liq))
+    m3.metric("ROI %", f"{roi:.2f}%")
 
     if st.button("💾 Salvar Simulação na Tabela"):
         dados = {
@@ -157,7 +172,7 @@ def main():
             "ROI %": round(roi, 2)
         }
         salvar_dados(dados)
-        st.toast("Simulação Salva!", icon="✅")
+        st.toast("Salvo com sucesso!", icon="✅")
 
     # --- HISTÓRICO ---
     st.markdown("---")
@@ -167,28 +182,39 @@ def main():
     if os.path.exists(arquivo_hist):
         df_hist = pd.read_csv(arquivo_hist, sep=';', decimal=',', encoding='utf-8-sig')
         
-        edited_df = st.data_editor(df_hist, use_container_width=True, num_rows="dynamic", key="editor_final")
+        # Editor com opção de deletar linhas
+        edited_df = st.data_editor(df_hist, use_container_width=True, num_rows="dynamic", key="editor_v5")
         
         if len(edited_df) != len(df_hist):
             edited_df.to_csv(arquivo_hist, index=False, sep=';', decimal=',', encoding='utf-8-sig')
             st.rerun()
 
-        # BOTÃO DE DOWNLOAD QUE REALMENTE TROCA PONTO POR VÍRGULA
+        # BOTÃO DE DOWNLOAD QUE REALMENTE CONVERTE PONTO EM VÍRGULA
         df_export = preparar_para_excel_br(edited_df)
-        csv_corrigido = df_export.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
+        csv_data = df_export.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
         
         st.download_button(
-            label="📥 Baixar Histórico para Excel",
-            data=csv_corrigido,
-            file_name=f"historico_leilao_br_{datetime.now().strftime('%d_%m_%Y')}.csv",
+            label="📥 Baixar Histórico para Excel (BR)",
+            data=csv_data,
+            file_name=f"historico_leilao_{datetime.now().strftime('%d_%m_%Y')}.csv",
             mime="text/csv",
         )
 
-        if st.button("🗑️ Limpar Tudo"):
+        if st.button("🗑️ Limpar Todo o Histórico"):
             os.remove(arquivo_hist)
             st.rerun()
-    else:
-        st.info("Nenhuma simulação salva ainda.")
+    
+    # --- BLOCO DO ROBÔ CAIXA ---
+    st.markdown("---")
+    st.subheader("🤖 Consultar Lista da Caixa")
+    if st.button("🔍 Iniciar Scraping Caixa"):
+        with st.spinner("Acessando site da Caixa..."):
+            csv_res, count = robo_caixa()
+            if csv_res:
+                st.success(f"Encontrados {count} imóveis!")
+                st.download_button("📥 Baixar Lista Caixa (CSV)", csv_res, "imoveis_caixa.csv", "text/csv")
+            else:
+                st.error(count)
 
 if __name__ == "__main__":
     main()
