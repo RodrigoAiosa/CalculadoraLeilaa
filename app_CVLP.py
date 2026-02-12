@@ -18,14 +18,6 @@ st.set_page_config(page_title="Calculadora de Viabilidade Leilão", layout="wide
 def format_brl(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-def preparar_para_excel_br(df):
-    """Força a conversão de todos os decimais para vírgula em formato texto para o Excel não bugar."""
-    df_br = df.copy()
-    for col in df_br.columns:
-        if pd.api.types.is_numeric_dtype(df_br[col]):
-            df_br[col] = df_br[col].apply(lambda x: str(round(x, 2)).replace('.', ','))
-    return df_br
-
 def tratar_texto_caixa(df):
     """Corrige os erros de codificação da Caixa."""
     mapa = {
@@ -52,11 +44,13 @@ def salvar_dados(nova_simulacao):
     df_novo = pd.DataFrame([nova_simulacao])
     
     if os.path.exists(arquivo):
+        # Lê o arquivo tratando a vírgula como decimal para não perder a precisão
         df_antigo = pd.read_csv(arquivo, sep=';', decimal=',', encoding='utf-8-sig')
         df_final = pd.concat([df_antigo, df_novo], ignore_index=True)
     else:
         df_final = df_novo
         
+    # Salva explicitamente com ponto e vírgula e decimal como vírgula
     df_final.to_csv(arquivo, index=False, sep=';', decimal=',', encoding='utf-8-sig')
     return df_final
 
@@ -72,12 +66,17 @@ def robo_caixa():
     chrome_path = shutil.which("chromium") or shutil.which("google-chrome")
     driver_path = shutil.which("chromedriver")
 
+    if not chrome_path or not driver_path:
+        return None, "Erro: Binários não encontrados."
+
     options = webdriver.ChromeOptions()
     options.binary_location = chrome_path
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    
+    options.add_argument("--disable-gpu")
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+
     prefs = {"download.default_directory": download_dir, "download.prompt_for_download": False}
     options.add_experimental_option("prefs", prefs)
     
@@ -85,6 +84,7 @@ def robo_caixa():
     try:
         service = Service(executable_path=driver_path)
         driver = webdriver.Chrome(service=service, options=options)
+        driver.set_page_load_timeout(30)
         driver.get("https://venda-imoveis.caixa.gov.br/sistema/download-lista.asp")
         
         wait = WebDriverWait(driver, 25)
@@ -99,13 +99,13 @@ def robo_caixa():
         while time.time() - start < timeout:
             arquivos = glob.glob(os.path.join(download_dir, "*.csv"))
             if arquivos:
-                time.sleep(2)
+                time.sleep(3)
                 df = pd.read_csv(arquivos[0], sep=';', encoding='ISO-8859-1', skiprows=2)
                 df = tratar_texto_caixa(df)
-                csv_data = df.to_csv(index=False, sep=';', decimal=',', encoding='utf-8-sig')
+                csv_data = df.to_csv(index=False, sep=';', encoding='utf-8-sig')
                 driver.quit()
                 return csv_data, len(df)
-            time.sleep(2)
+            time.sleep(3)
     except Exception as e:
         if driver: driver.quit()
         return None, f"Erro: {str(e)}"
@@ -117,7 +117,7 @@ def main():
     if os.path.exists(caminho_logo):
         st.sidebar.image(caminho_logo, use_container_width=True)
 
-    st.title("⚖️ Calculadora de Viabilidade Leilão")
+    st.title("⚖️ Calculadora de Viabilidade Leilão - **ARREMATE SEM MEDO**")
 
     # --- SIDEBAR: PERFIS ---
     st.sidebar.header("🚀 Perfil de Investimento")
@@ -132,34 +132,20 @@ def main():
     }
     d = defaults[perfil]
 
-    with st.expander("💵 Valores e Custos de Aquisição", expanded=True):
+    with st.expander("💵 Detalhes da Simulação", expanded=True):
         col1, col2 = st.columns(2)
         with col1:
             v_avaliacao = st.number_input("Valor de Avaliação (R$)", value=float(d["avaliacao"]))
             v_lance = st.number_input("Valor do Lance (R$)", value=float(d["lance"]))
-            comissao_leiloeiro = v_lance * 0.05
-            itbi = v_lance * 0.03
-            escritura = 3500.0
+            desocupa = st.number_input("Desocupação (R$)", value=float(d["desocupa"]))
         with col2:
-            desocupa = st.number_input("Custos Desocupação (R$)", value=float(d["desocupa"]))
-            reforma = st.number_input("Custos Reforma (R$)", value=float(d["reforma"]))
-            v_venda = st.number_input("Expectativa de Venda (R$)", value=float(d["venda"]))
-
-    with st.expander("📅 Custos Mensais (Carregamento - 6 meses)"):
-        meses = st.slider("Meses até a venda", 1, 24, 6)
-        c_condo = st.number_input("Condomínio Mensal", value=float(d["condo"]))
-        c_iptu = st.number_input("IPTU Mensal", value=float(d["iptu"]))
-        total_mensal = (c_condo + c_iptu) * meses
-
-    invest_total = v_lance + comissao_leiloeiro + itbi + escritura + desocupa + reforma + total_mensal
-    lucro_liq = v_venda - invest_total
-    roi = (lucro_liq / invest_total * 100) if invest_total > 0 else 0
-
-    st.divider()
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Investimento Total", format_brl(invest_total))
-    m2.metric("Lucro Líquido", format_brl(lucro_liq))
-    m3.metric("ROI %", f"{roi:.2f}%")
+            reforma = st.number_input("Reforma (R$)", value=float(d["reforma"]))
+            v_venda = st.number_input("Preço de Venda (R$)", value=float(d["venda"]))
+            
+        invest_total = v_lance + desocupa + reforma
+        lucro_liq = v_venda - invest_total
+        roi = (lucro_liq / invest_total * 100) if invest_total > 0 else 0
+        st.metric("Lucro Líquido Estimado", format_brl(lucro_liq))
 
     if st.button("💾 Salvar Simulação na Tabela"):
         dados = {
@@ -172,27 +158,29 @@ def main():
             "ROI %": round(roi, 2)
         }
         salvar_dados(dados)
-        st.toast("Salvo com sucesso!", icon="✅")
+        st.toast("Simulação arquivada!", icon="✅")
 
-    # --- HISTÓRICO ---
     st.markdown("---")
     st.subheader("📜 Histórico de Simulações")
     arquivo_hist = "historico_simulacoes.csv"
     
     if os.path.exists(arquivo_hist):
+        # Lê garantindo que os decimais salvos como vírgula voltem a ser números no código
         df_hist = pd.read_csv(arquivo_hist, sep=';', decimal=',', encoding='utf-8-sig')
         
-        # Editor com opção de deletar linhas
-        edited_df = st.data_editor(df_hist, use_container_width=True, num_rows="dynamic", key="editor_v5")
+        edited_df = st.data_editor(
+            df_hist, 
+            use_container_width=True, 
+            num_rows="dynamic",
+            key="historico_editor"
+        )
         
         if len(edited_df) != len(df_hist):
             edited_df.to_csv(arquivo_hist, index=False, sep=';', decimal=',', encoding='utf-8-sig')
             st.rerun()
 
-        # BOTÃO DE DOWNLOAD QUE REALMENTE CONVERTE PONTO EM VÍRGULA
-        df_export = preparar_para_excel_br(edited_df)
-        csv_data = df_export.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
-        
+        # BOTÃO DE DOWNLOAD COM CONVERSÃO FINAL PARA VÍRGULA
+        csv_data = edited_df.to_csv(index=False, sep=';', decimal=',', encoding='utf-8-sig').encode('utf-8-sig')
         st.download_button(
             label="📥 Baixar Histórico para Excel (BR)",
             data=csv_data,
@@ -201,20 +189,11 @@ def main():
         )
 
         if st.button("🗑️ Limpar Todo o Histórico"):
-            os.remove(arquivo_hist)
+            if os.path.exists(arquivo_hist):
+                os.remove(arquivo_hist)
             st.rerun()
-    
-    # --- BLOCO DO ROBÔ CAIXA ---
-    st.markdown("---")
-    st.subheader("🤖 Consultar Lista da Caixa")
-    if st.button("🔍 Iniciar Scraping Caixa"):
-        with st.spinner("Acessando site da Caixa..."):
-            csv_res, count = robo_caixa()
-            if csv_res:
-                st.success(f"Encontrados {count} imóveis!")
-                st.download_button("📥 Baixar Lista Caixa (CSV)", csv_res, "imoveis_caixa.csv", "text/csv")
-            else:
-                st.error(count)
+    else:
+        st.info("O histórico está vazio.")
 
 if __name__ == "__main__":
     main()
