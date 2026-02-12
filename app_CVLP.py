@@ -238,25 +238,35 @@ def main():
     if os.path.exists(arquivo_hist):
         df_hist = pd.read_csv(arquivo_hist, sep=';', encoding='utf-8-sig')
         
+        # Formatar colunas monetárias para exibição na tabela
+        df_display = df_hist.copy()
+        colunas_moeda_display = ['Avaliacao', 'Lance', 'Investimento Inicial', 'Lucro Liquido']
+        
+        for col in colunas_moeda_display:
+            if col in df_display.columns:
+                df_display[col] = df_display[col].apply(
+                    lambda x: f'R$ {x:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.') if pd.notna(x) else x
+                )
+        
         # O data_editor permite o ícone de lixeira (que remove a linha)
-        # Ao clicar no ícone de lixeira ao lado do índice, a linha é marcada para deleção
-        edited_df = st.data_editor(
-            df_hist, 
+        edited_df_display = st.data_editor(
+            df_display, 
             use_container_width=True, 
             num_rows="dynamic",
             key="historico_editor"
         )
         
-        # Se o número de linhas mudar, salvamos o novo arquivo
-        if len(edited_df) != len(df_hist):
-            edited_df.to_csv(arquivo_hist, index=False, sep=';', encoding='utf-8-sig')
+        # Se o número de linhas mudar (exclusão), salvamos o arquivo atualizado
+        if len(edited_df_display) != len(df_hist):
+            df_hist = df_hist.iloc[:len(edited_df_display)]
+            df_hist.to_csv(arquivo_hist, index=False, sep=';', encoding='utf-8-sig')
             st.rerun()
 
         # Botões de ação com alinhamento
         col_btn1, col_spacer, col_btn2 = st.columns([1, 6, 1])
         with col_btn1:
             # Botão de download CSV com separação correta por coluna (ponto e vírgula para Excel BR)
-            df_download = formatar_csv_para_excel(edited_df)
+            df_download = formatar_csv_para_excel(df_hist)
             csv_download = df_download.to_csv(index=False, sep=';', encoding='utf-8-sig')
             st.download_button(
                 label="📥 Download as CSV",
@@ -289,8 +299,7 @@ def main():
             return None
 
     st.sidebar.markdown("---")
-    st.sidebar.download_button("📥 BAIXAR EXCEL ÚNICO", exportar(), f"simulacao_{tipo_imovel}.xlsx")
+    st.sidebar.download_button("📥 BAIXAR RELATÓRIO EXCEL", exportar(), f"simulacao_{tipo_imovel}.xlsx")
 
 if __name__ == "__main__":
     main()
-
