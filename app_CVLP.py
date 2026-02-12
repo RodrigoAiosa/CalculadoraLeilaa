@@ -13,7 +13,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="Calculadora de Viabilidade Leilão", layout="wide", page_icon="⚖️")
+st.set_page_config(page_title="Calculadora de Viabilidade Leilão - ARREMATE SEM MEDO", layout="wide", page_icon="⚖️")
 
 def format_brl(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -252,4 +252,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
