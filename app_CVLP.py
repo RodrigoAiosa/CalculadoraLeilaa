@@ -130,6 +130,55 @@ def robo_caixa():
         return None, f"Erro: {str(e)}"
     return None, "Tempo esgotado."
 
+# --- FUNÇÃO PARA GERAR CENÁRIOS DE ROI ---
+def gerar_cenarios_roi(invest_total, v_comis_percentual, p_imp, v_financiado):
+    """
+    Gera uma tabela de cenários variando o preço de venda até o ROI ficar negativo
+    """
+    cenarios = []
+    
+    # Começa com um valor alto de venda e vai diminuindo
+    preco_venda = invest_total * 1.5  # Começa com 50% acima do investimento
+    passo = invest_total * 0.05  # Diminui 5% do investimento a cada vez
+    
+    while True:
+        # Calcular comissão
+        v_comissao = preco_venda * (v_comis_percentual / 100)
+        
+        # Calcular lucro bruto
+        lucro_bruto = (preco_venda - v_comissao) - v_financiado - invest_total
+        
+        # Calcular imposto
+        v_imposto = max(0.0, lucro_bruto * (p_imp / 100))
+        
+        # Calcular lucro líquido
+        lucro_liquido = lucro_bruto - v_imposto
+        
+        # Calcular ROI
+        roi = (lucro_liquido / invest_total * 100) if invest_total > 0 else 0
+        
+        cenarios.append({
+            'Preço de Venda': preco_venda,
+            'Comissão Corretor': v_comissao,
+            'Lucro Bruto': lucro_bruto,
+            'Imposto': v_imposto,
+            'Lucro Líquido': lucro_liquido,
+            'ROI %': round(roi, 2)
+        })
+        
+        # Para quando o ROI ficar negativo
+        if roi < 0:
+            break
+        
+        # Diminui o preço de venda
+        preco_venda -= passo
+        
+        # Proteção para não entrar em loop infinito
+        if preco_venda < invest_total * 0.3:
+            break
+    
+    return pd.DataFrame(cenarios)
+
 # --- INTERFACE PRINCIPAL ---
 def main():
     # --- LOGOTIPO NA SIDEBAR ---
@@ -282,24 +331,60 @@ def main():
     else:
         st.info("Nenhuma simulação salva ainda.")
 
-    # --- RELATÓRIO EXCEL ---
+    # --- RELATÓRIO EXCEL COM ABA CENÁRIO ROI ---
     def exportar():
         output = io.BytesIO()
         try:
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                pd.DataFrame([{"Data": datetime.now(), "Tipo": tipo_imovel, "Lucro": lucro_liq, "ROI %": roi}]).to_excel(writer, index=False, sheet_name='Resumo')
+                # Aba 1: Resumo
+                pd.DataFrame([{
+                    "Data": datetime.now().strftime("%d/%m/%Y %H:%M"),
+                    "Tipo": tipo_imovel,
+                    "Lucro": lucro_liq,
+                    "ROI %": roi
+                }]).to_excel(writer, index=False, sheet_name='Resumo')
+                
+                # Aba 2: Detalhes
                 pd.DataFrame([
                     {"Categoria": "Arrematação (Entrada + Docs)", "Valor": total_b1},
                     {"Categoria": "Custos (Reforma + Manutenção)", "Valor": total_b2},
                     {"Categoria": "Comissão Corretor", "Valor": v_comis},
                     {"Categoria": "Imposto", "Valor": v_imp}
                 ]).to_excel(writer, index=False, sheet_name='Detalhes')
+                
+                # Aba 3: Cenários de ROI
+                df_cenarios = gerar_cenarios_roi(invest_total, p_corretor, p_imp, v_financiado)
+                df_cenarios.to_excel(writer, index=False, sheet_name='cenario_roi')
+                
+                # Formatação da aba cenario_roi
+                workbook = writer.book
+                worksheet = writer.sheets['cenario_roi']
+                
+                # Formato de moeda brasileira
+                money_fmt = workbook.add_format({'num_format': 'R$ #,##0.00'})
+                percent_fmt = workbook.add_format({'num_format': '0.00"%"'})
+                
+                # Aplicar formatação nas colunas
+                worksheet.set_column('A:A', 18, money_fmt)  # Preço de Venda
+                worksheet.set_column('B:B', 18, money_fmt)  # Comissão Corretor
+                worksheet.set_column('C:C', 18, money_fmt)  # Lucro Bruto
+                worksheet.set_column('D:D', 18, money_fmt)  # Imposto
+                worksheet.set_column('E:E', 18, money_fmt)  # Lucro Líquido
+                worksheet.set_column('F:F', 12, percent_fmt)  # ROI %
+                
             return output.getvalue()
-        except:
+        except Exception as e:
+            st.error(f"Erro ao gerar Excel: {str(e)}")
             return None
 
     st.sidebar.markdown("---")
-    st.sidebar.download_button("📥 BAIXAR RELATÓRIO EXCEL", exportar(), f"simulacao_{tipo_imovel}.xlsx")
+    excel_data = exportar()
+    if excel_data:
+        st.sidebar.download_button(
+            "📥 BAIXAR RELATÓRIO EXCEL", 
+            excel_data, 
+            f"simulacao_{tipo_imovel}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        )
 
 if __name__ == "__main__":
     main()
