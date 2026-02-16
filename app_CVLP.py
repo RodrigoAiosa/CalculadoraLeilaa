@@ -354,11 +354,6 @@ def main():
 
     st.sidebar.markdown("---")
     
-    # Link do Calendly e WhatsApp conforme solicitado
-    st.sidebar.markdown("[📅 Agendar Reunião (Calendly)](https://calendly.com/rodrigoaiosa)")
-    zap_msg = f"Olá Rodrigo, gostaria de falar sobre a viabilidade do imóvel {tipo_imovel} com ROI de {roi:.2f}%."
-    st.sidebar.markdown(f"[💬 Falar no WhatsApp](https://wa.me/5511977019335?text={zap_msg.replace(' ', '%20')})")
-
     try:
         excel_data = exportar()
         if excel_data:
@@ -372,3 +367,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
