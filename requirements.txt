@@ -1,7 +1,5 @@
-opencv-python-headless
+streamlit
 pandas
-numpy
-ultralytics
-supervision
-openpyxl
 selenium
+openpyxl
+xlsxwriter
