@@ -4,3 +4,4 @@ numpy
 ultralytics
 supervision
 openpyxl
+selenium
