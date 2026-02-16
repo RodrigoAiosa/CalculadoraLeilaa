@@ -353,38 +353,45 @@ def main():
                 ]).to_excel(writer, index=False, sheet_name='Detalhes')
                 
                 # Aba 3: Cenários de ROI
-                df_cenarios = gerar_cenarios_roi(invest_total, p_corretor, p_imp, v_financiado)
-                df_cenarios.to_excel(writer, index=False, sheet_name='cenario_roi')
-                
-                # Formatação da aba cenario_roi
-                workbook = writer.book
-                worksheet = writer.sheets['cenario_roi']
-                
-                # Formato de moeda brasileira
-                money_fmt = workbook.add_format({'num_format': 'R$ #,##0.00'})
-                percent_fmt = workbook.add_format({'num_format': '0.00"%"'})
-                
-                # Aplicar formatação nas colunas
-                worksheet.set_column('A:A', 18, money_fmt)  # Preço de Venda
-                worksheet.set_column('B:B', 18, money_fmt)  # Comissão Corretor
-                worksheet.set_column('C:C', 18, money_fmt)  # Lucro Bruto
-                worksheet.set_column('D:D', 18, money_fmt)  # Imposto
-                worksheet.set_column('E:E', 18, money_fmt)  # Lucro Líquido
-                worksheet.set_column('F:F', 12, percent_fmt)  # ROI %
+                if invest_total > 0:  # Só gera se houver investimento
+                    df_cenarios = gerar_cenarios_roi(invest_total, p_corretor, p_imp, v_financiado)
+                    df_cenarios.to_excel(writer, index=False, sheet_name='cenario_roi')
+                    
+                    # Formatação da aba cenario_roi
+                    workbook = writer.book
+                    worksheet = writer.sheets['cenario_roi']
+                    
+                    # Formato de moeda brasileira
+                    money_fmt = workbook.add_format({'num_format': 'R$ #,##0.00'})
+                    percent_fmt = workbook.add_format({'num_format': '0.00"%"'})
+                    
+                    # Aplicar formatação nas colunas
+                    worksheet.set_column('A:A', 18, money_fmt)  # Preço de Venda
+                    worksheet.set_column('B:B', 18, money_fmt)  # Comissão Corretor
+                    worksheet.set_column('C:C', 18, money_fmt)  # Lucro Bruto
+                    worksheet.set_column('D:D', 18, money_fmt)  # Imposto
+                    worksheet.set_column('E:E', 18, money_fmt)  # Lucro Líquido
+                    worksheet.set_column('F:F', 12, percent_fmt)  # ROI %
                 
             return output.getvalue()
         except Exception as e:
             st.error(f"Erro ao gerar Excel: {str(e)}")
+            import traceback
+            st.error(traceback.format_exc())
             return None
 
     st.sidebar.markdown("---")
-    excel_data = exportar()
-    if excel_data:
-        st.sidebar.download_button(
-            "📥 BAIXAR RELATÓRIO EXCEL", 
-            excel_data, 
-            f"simulacao_{tipo_imovel}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-        )
+    try:
+        excel_data = exportar()
+        if excel_data:
+            st.sidebar.download_button(
+                "📥 BAIXAR RELATÓRIO EXCEL", 
+                excel_data, 
+                f"simulacao_{tipo_imovel}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            )
+    except Exception as e:
+        st.sidebar.error("Erro ao criar botão de download")
+        st.sidebar.error(str(e))
 
 if __name__ == "__main__":
     main()
