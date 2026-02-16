@@ -197,7 +197,7 @@ def main():
     # --- SIDEBAR: PERFIS ---
     st.sidebar.header("🚀 Perfil de Investimento")
     tipo_imovel = st.sidebar.selectbox("Selecione o tipo de imóvel:", ["Apartamento", "Casa", "Terreno", "Gleba"])
-    perfil = st.sidebar.selectbox("Escolha um perfil:", ["Manual", "Apartamento Popular", "Médio Padrão", "Alto Padrão"])
+    perfil = st.sidebar.selectbox("Escolha um perfil:", ["Manual", "Popular", "Médio Padrão", "Alto Padrão"])
 
     defaults = {
         "Manual": {"avaliacao": 0.0, "lance": 0.0, "desocupa": 0.0, "reforma": 0.0, "condo": 0.0, "iptu": 0.0, "venda": 0.0, "agua": 0.0, "luz": 0.0, "gas": 0.0},
@@ -395,3 +395,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
