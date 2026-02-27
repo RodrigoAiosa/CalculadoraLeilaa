@@ -214,7 +214,12 @@ def main():
             else:
                 v_entrada = v_lance
 
-            taxas_docs = st.number_input("Leiloeiro/ITBI/Registro (R$)", value=float(v_lance * 0.08))
+            v_leiloeiro = st.number_input("Leiloeiro (R$)", value=float(v_lance * 0.05))
+            v_itbi = st.number_input("ITBI (R$)", value=float(v_lance * 0.02))
+            v_registro = st.number_input("Registro (R$)", value=float(v_lance * 0.01))
+            taxas_docs = v_leiloeiro + v_itbi + v_registro
+            st.caption(f"Total Leiloeiro/ITBI/Registro: {format_brl(taxas_docs)}")
+
             desocupa = st.number_input("Desocupação (R$)", value=float(d.get("desocupa", 0)))
             total_b1 = v_entrada + taxas_docs + desocupa
         with col_mem: st.metric("Total Arrematação", format_brl(total_b1))
@@ -367,4 +372,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
